@@ -11,6 +11,7 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include "selector.h"
+#include "pop3.h"
 
 
 #define MAX_PENDING_CONNECTIONS 20
@@ -114,7 +115,7 @@ int main(int argc, const char* argv[]){
 
     //TODO: cambiar para nuestros handlers
     const struct fd_handler socksv5 = {
-        .handle_read       = NULL,
+        .handle_read       = pop3_passive_accept,
         .handle_write      = NULL,
         .handle_close      = NULL, // nada que liberar
     };

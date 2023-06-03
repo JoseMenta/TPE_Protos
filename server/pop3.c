@@ -7,7 +7,7 @@
 
 //fd_handler que van a usar todas las conexiones al servidor (que usen el socket pasivo de pop3)
 static const struct fd_handler handler = {
-    .handle_read = NULL,
+    .handle_read = pop3_read,
     .handle_write = NULL,
     .handle_block = NULL,
     .handle_close = NULL
@@ -66,5 +66,7 @@ void pop3_destroy(pop3* state){
     free(state);
 }
 
-
+void pop3_read(struct selector_key* key){
+    
+}
 

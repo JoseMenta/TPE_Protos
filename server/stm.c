@@ -33,6 +33,8 @@ handle_first(struct state_machine *stm, struct selector_key *key) {
     }
 }
 
+
+//Revisa si vengo de retornar el proximo estado o si fallo/se quedo ahí
 inline static
 void jump(struct state_machine *stm, unsigned next, struct selector_key *key) {
     if(next > stm->max_state) {

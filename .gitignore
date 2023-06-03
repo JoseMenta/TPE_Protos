@@ -1,4 +1,8 @@
+
 *.o
+# Binarios
 bin/*
+# Archivos generados por IDE
+*.dSYM/
 popserver
 popadmin

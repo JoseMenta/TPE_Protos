@@ -3,11 +3,15 @@
 #include <netinet/in.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
+#include <errno.h>
 #include "selector.h"
 #include "pop3.h"
 #include "buffer.h"
 #include "stm.h"
 #include "buffer.h"
+
+#define WELCOME_MESSAGE "POP3 server\n"
 
 //Esto es lo que vamos a pasar en void* data del selector
 //Vamos a agregar lo que necesitemos, como un array con todos los mails que tiene el usuario
@@ -111,28 +115,38 @@ static const struct fd_handler handler = {
     .handle_close = NULL
 };
 
-void pop3_passive_accept(struct selector_key* key){
+void pop3_passive_accept(struct selector_key* key) {
     printf("Se esta aceptando la conexion\n");
-   //Vamos a aceptar la conexion entrante
-    pop3* state = NULL;
-    // Se crea la estructura el socket activo para la conexion entrante para una direccion IPv4
-    struct sockaddr_in address;
-    socklen_t address_len;
+    //Vamos a aceptar la conexion entrante
+    pop3 *state = NULL;
+    // Se crea la estructura el socket a
+    // ctivo para la conexion entrante para una direccion IPv4
+    struct sockaddr_storage address;
+    socklen_t address_len = sizeof(address);
     // Se acepta la conexion entrante, se cargan los datos en el socket activo y se devuelve el fd del socket activo
     // Este fd será tanto para leer como para escribir en el socket activo
-    const int client_fd = accept(key->fd, (struct sockaddr*) &address,&address_len);
+    const int client_fd = accept(key->fd, (struct sockaddr *) &address, &address_len);
     printf("Tenemos el fd para la conexion\n");
     //Si tuvimos un error al crear el socket activo o no lo pudimos hacer no bloqueante
-    if (client_fd == -1 || selector_fd_set_nio(client_fd) == -1)
+    if (client_fd == -1){
+        printf("El fd es: %d\n", key->fd);
+        printf("El errno es: %s\n", strerror(errno));
+        printf("fallo el accept client\n");
         goto fail;
+    }
+    if(selector_fd_set_nio(client_fd) == -1) {
+        printf("Fallo el flag no bloqueante");
+        goto fail;
+    }
     
     if((state = pop3_create())==NULL){
+        printf("Fallo el create");
         goto fail;
     }
 
     //registramos en el selector al nuevo socket, y nos interesamos en escribir para mandarle el mensaje de bienvenida
-    //TODO: cambiar a OP_WRITE, lo dejamos asi para el echo 
-    if(selector_register(key->s,client_fd,&handler,OP_READ,state)!= SELECTOR_SUCCESS){
+    if(selector_register(key->s,client_fd,&handler,OP_WRITE,state)!= SELECTOR_SUCCESS){
+        printf("Fallo el registro del socket");
         goto fail;
     }
     printf("Registramos al fd en el selector\n");
@@ -162,8 +176,14 @@ pop3* pop3_create(){
     stm_init(&ans->stm);
 
     // Se inicializan los buffers para el cliente (uno para leer y otro para escribir)
-    buffer_init(&ans->info_read_buff, BUFFER_SIZE ,ans->read_buff);
-    buffer_init(&ans->info_write_buff, BUFFER_SIZE ,ans->read_buff);
+    buffer_init(&(ans->info_read_buff), BUFFER_SIZE ,ans->read_buff);
+    buffer_init(&(ans->info_write_buff), BUFFER_SIZE ,ans->write_buff);
+
+    size_t max = 0;
+    uint8_t * ptr = buffer_write_ptr(&(ans->info_write_buff),&max);
+    strncpy((char*)ptr,WELCOME_MESSAGE,max);
+    buffer_write_adv(&(ans->info_write_buff),strlen(WELCOME_MESSAGE));
+
     printf("Se termina de inicializar la estructura\n");
     return ans;
 }
@@ -205,6 +225,7 @@ void pop3_done(struct selector_key* key){
     if (selector_unregister_fd(key->s, key->fd) != SELECTOR_SUCCESS) {
         abort();
     }
+    pop3_destroy(GET_POP3(key));
     close(key->fd);
 }
 
@@ -253,44 +274,76 @@ unsigned hello_read(struct selector_key* key){
 
 unsigned hello_write(struct selector_key* key){
     pop3* state = GET_POP3(key);
-    
-    printf("Entre en la funcion hello_write\n");
 
-    size_t max_size = 0;
-    // Se obtiene el puntero del proximo byte a escribir y la cantidad de bytes disponibles para escribir
-    uint8_t * ptr = buffer_read_ptr(&state->info_write_buff, &max_size);
+    printf("Entra para imprimir el mensaje de bienvenida");
+
+    size_t  max = 0;
+    uint8_t* ptr = buffer_read_ptr(&(state->info_write_buff),&max);
+
+//    if(max==0){
+//        //Ya leimos todo lo que podiamos leer
+//        return AUTHORIZATION;
+//    }
+
     ssize_t sent_count = 0;
 
-    printf("estoy tratando de escribir\n");
+    sent_count = send(key->fd,ptr,max,0);
 
-    for(int i = 0; i<max_size; i++){
-        if(ptr[i]=='\n'){
-            //TODO: Considerar poner MSG_NOSIGNAL para que no mande señales en el cierrre del socket
-
-            // Se escribe por el socket hasta el caracter '\n'
-            sent_count = send(key->fd, ptr, i+1, 0);
-        }
-    }
     if(sent_count == -1){
+        //Cerrar la conexion
+//        exit(1);
         printf("Error al escribir en el socket");
         return FINISHED;
     }
 
-    printf("Ya mande el texto con el \n");
-
-
-    // Se mueve el puntero de lectura del buffer de escritura
-    buffer_read_adv(&state->info_write_buff, sent_count);
-    
-    
-
-    if(selector_set_interest(key->s, key->fd, OP_NOOP) != SELECTOR_SUCCESS
-             || selector_set_interest(key->s, key->fd, OP_READ) != SELECTOR_SUCCESS){
-                printf("Error cambiando a interes de lectura");
-                    return FINISHED;
-             }
-    
+    buffer_read_adv(&(state->info_write_buff),sent_count);
+    if(!buffer_can_read(&(state->info_write_buff))){
+        if(selector_set_interest(key->s,key->fd,OP_READ)!=SELECTOR_SUCCESS){
+            printf("Error cambiando el estado a read\n");
+            return FINISHED;
+        }
+        return HELLO;
+    }
     return HELLO;
+//    pop3* state = GET_POP3(key);
+//
+//    printf("Entre en la funcion hello_write\n");
+//
+//    size_t max_size = 0;
+//    // Se obtiene el puntero del proximo byte a escribir y la cantidad de bytes disponibles para escribir
+//    uint8_t * ptr = buffer_read_ptr(&state->info_write_buff, &max_size);
+//    ssize_t sent_count = 0;
+//
+//    printf("estoy tratando de escribir\n");
+//
+//    for(int i = 0; i<max_size; i++){
+//        if(ptr[i]=='\n'){
+//            //TODO: Considerar poner MSG_NOSIGNAL para que no mande señales en el cierrre del socket
+//
+//            // Se escribe por el socket hasta el caracter '\n'
+//            sent_count = send(key->fd, ptr, i+1, 0);
+//        }
+//    }
+//    if(sent_count == -1){
+//        printf("Error al escribir en el socket");
+//        exit(1);
+//    }
+//
+//    printf("Ya mande el texto con el \n");
+//
+//
+//    // Se mueve el puntero de lectura del buffer de escritura
+//    buffer_read_adv(&state->info_write_buff, sent_count);
+//
+//
+//
+//    if(selector_set_interest(key->s, key->fd, OP_NOOP) != SELECTOR_SUCCESS
+//             || selector_set_interest(key->s, key->fd, OP_READ) != SELECTOR_SUCCESS){
+//                printf("Error cambiando a interes de lectura");
+//                exit(1);
+//             }
+//
+//    return HELLO;
 }
 
 

@@ -5,6 +5,7 @@
 bin/*
 # Archivos generados por IDE
 *.dSYM/
+.DS_Store
 .vscode/settings.json
 popserver
 popadmin

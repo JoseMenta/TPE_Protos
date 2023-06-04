@@ -12,9 +12,31 @@
 #include "buffer.h"
 
 #define WELCOME_MESSAGE "POP3 server\n"
-
+#define PASSWD_PATH "/etc/passwd"
 //Esto es lo que vamos a pasar en void* data del selector
 //Vamos a agregar lo que necesitemos, como un array con todos los mails que tiene el usuario
+
+
+struct authorization{
+    char * user;
+    char * pass;
+    bool user_is_present;
+    char * path_to_user_data;
+};
+
+struct transaction{
+    int i;
+};
+
+struct update{
+    int i;
+};
+
+//typedef struct email email;
+//struct email{
+//
+//};
+
 struct pop3{
     pop3_command command;
     struct state_machine stm;
@@ -23,6 +45,11 @@ struct pop3{
     uint8_t write_buff[BUFFER_SIZE];
     buffer info_read_buff;
     buffer info_write_buff;
+    union{
+        struct authorization authorization;
+        struct transaction transaction;
+        struct update update;
+    }state_data;
 };
 
 //Estados posibles del cliente
@@ -67,7 +94,7 @@ unsigned int hello_write(struct selector_key* key);
 unsigned int hello_read(struct selector_key* key);
 unsigned int authorization_read(struct selector_key* key);
 unsigned int authorization_write(struct selector_key* key);
-void authorization_departure(const unsigned state, struct selector_key *key);
+void transaction_arrival(const unsigned state, struct selector_key *key);
 unsigned int transaction_write(struct selector_key* key);
 unsigned int transaction_read(struct selector_key* key);
 void update_arrival(const unsigned state, struct selector_key *key);
@@ -85,11 +112,11 @@ static const struct state_definition state_handlers[] ={
     {
         .state = AUTHORIZATION,
         .on_read_ready = authorization_read,
-        .on_write_ready = authorization_write,
-        .on_departure = authorization_departure,
+        .on_write_ready = authorization_write
     },
     {
         .state = TRANSACTION,
+        .on_arrival = transaction_arrival,
         .on_write_ready = transaction_write,
         .on_read_ready = transaction_read
     },
@@ -349,7 +376,7 @@ unsigned hello_write(struct selector_key* key){
 
 unsigned authorization_read(struct selector_key* key){}
 unsigned authorization_write(struct selector_key* key){}
-void authorization_departure(const unsigned state, struct selector_key *key){}
+void transaction_arrival(const unsigned state, struct selector_key *key){}
 unsigned transaction_write(struct selector_key* key){}
 unsigned transaction_read(struct selector_key* key){}
 void update_arrival(const unsigned state, struct selector_key *key){}

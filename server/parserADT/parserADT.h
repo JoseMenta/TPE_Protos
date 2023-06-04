@@ -39,7 +39,7 @@ parser_state parser_feed(parserADT p, uint8_t c);
  *
  * Retorna NULL si no pudo crear la copia
  */
-const char * get_cmd(parserADT p); 
+const char * get_cmd(parserADT p);
 
 /**
  * Devuelve una copia del argumento leido

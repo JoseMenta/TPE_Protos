@@ -19,6 +19,7 @@
 typedef struct parserCDT {
     const struct parser_definition *    def;                    // Automata
     uint8_t                             state;                  // Current automata state
+    bool                                has_error;              // Reached an error state
 
     char                                cmd[CMD_LENGTH+1];      // Command string
     uint8_t                             cmd_length;             // Command length
@@ -46,13 +47,14 @@ void parser_reset(parserADT p) {
     p->state = p->def->start_state;
     memset(p->cmd, 0, CMD_LENGTH+1);
     memset(p->arg, 0, ARG_MAX_LENGTH+1);
+    p->has_error=false;
     p->arg_length = p->cmd_length = 0;
 }
 
 const char * get_cmd(parserADT p) {
     char * cmd = calloc(p->cmd_length+1, sizeof(char));
     if(cmd != NULL) {
-        strncpy(p->cmd, cmd, p->cmd_length);
+        strncpy(cmd, p->cmd, p->cmd_length);
     }
     return cmd;
 }
@@ -60,7 +62,7 @@ const char * get_cmd(parserADT p) {
 const char * get_arg(parserADT p) {
     char * arg = calloc(p->arg_length+1, sizeof(char));
     if(arg != NULL) {
-        strncpy(p->arg, arg, p->arg_length);
+        strncpy(arg, p->arg, p->arg_length);
     }
     return arg;
 }
@@ -81,8 +83,8 @@ parser_state parser_feed(parserADT p, uint8_t c) {
                 matched = (c >= ASCII_a && c <= ASCII_z);
                 break;
             case ALPHANUMERIC:
-                c = tolower(c);
-                matched = ((c >= ASCII_0 && c <= ASCII_9) || (c >= ASCII_a && c <= ASCII_z));
+                char aux = tolower(c);
+                matched = ((aux >= ASCII_0 && aux <= ASCII_9) || (aux >= ASCII_a && aux <= ASCII_z));
                 break;
             case SPACE:
                 matched = (c == ASCII_SPACE);
@@ -105,18 +107,28 @@ parser_state parser_feed(parserADT p, uint8_t c) {
             p->state = state[i].dest;
             switch(state[i].type) {
                 case CMD:
-                    p->cmd[p->cmd_length++] = c;
+                    if(!p->has_error) {
+                        p->cmd[p->cmd_length++] = c;
+                    }
                     break;
                 case ARG:
-                    if (p->arg_length >= 40) {
-                        return ERROR;
-                    } 
-                    p->arg[p->arg_length++] = c;
+                    if(!p->has_error) {
+                        if (p->arg_length >= 40) {
+                            p->has_error=true;
+                            break;
+                        }
+                        p->arg[p->arg_length++] = c;
+                    }
                     break;
                 case ERR:
-                    return ERROR;
+                    p->has_error=true;
+                    break;
                 case END:
-                    return FINISHED;
+                    if(p->has_error){
+                        return ERROR;
+                    }else{
+                        return FINISHED;
+                    }
                 default:
                     break;
             }

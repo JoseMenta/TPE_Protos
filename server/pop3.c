@@ -58,7 +58,7 @@ typedef enum{
     ERROR
 } pop3_state;
 
-
+void pop3_done(struct selector_key* key);
 unsigned int hello_write(struct selector_key* key);
 unsigned int hello_read(struct selector_key* key);
 unsigned int authorization_read(struct selector_key* key);
@@ -175,6 +175,10 @@ void pop3_read(struct selector_key* key){
     // Se ejecuta la función de lectura para el estado actual de la maquina de estados
     const pop3_state st = stm_handler_read(stm,key);
     printf("Termina con el estado %d\n",st);
+
+    if(FINISHED == st){
+        pop3_done(key);
+    }
 }
 
 
@@ -185,11 +189,23 @@ void pop3_write(struct selector_key* key){
     // Se ejecuta la función de lectura para el estado actual de la maquina de estados
     const pop3_state st = stm_handler_write(stm,key); 
     printf("Termina con el estado %d\n",st);
+
+    if(FINISHED == st){
+        pop3_done(key);
+    }
 }
 
 
 void pop3_close(struct selector_key* key){
     pop3_destroy(GET_POP3(key));
+}
+
+
+void pop3_done(struct selector_key* key){
+    if (selector_unregister_fd(key->s, key->fd) != SELECTOR_SUCCESS) {
+        abort();
+    }
+    close(key->fd);
 }
 
 //borrar y liberar el pop3
@@ -216,7 +232,7 @@ unsigned hello_read(struct selector_key* key){
             
     if(read_count<=0){
         printf("Error leyendo del socket\n");
-        exit(1);
+        return FINISHED;
     }
     for(int i = 0; i<read_count; i++){
         printf("Estoy viendo a %c\n",ptr[i]);
@@ -225,7 +241,7 @@ unsigned hello_read(struct selector_key* key){
             if( selector_set_interest(key->s,key->fd,OP_NOOP) != SELECTOR_SUCCESS|| 
                 selector_set_interest(key->s,key->fd,OP_WRITE) != SELECTOR_SUCCESS){
                 printf("Error cambiando el interes del socket para escribir\n");
-                exit(1);
+                return FINISHED;
             }
         }
     }
@@ -257,7 +273,7 @@ unsigned hello_write(struct selector_key* key){
     }
     if(sent_count == -1){
         printf("Error al escribir en el socket");
-        exit(1);
+        return FINISHED;
     }
 
     printf("Ya mande el texto con el \n");
@@ -271,7 +287,7 @@ unsigned hello_write(struct selector_key* key){
     if(selector_set_interest(key->s, key->fd, OP_NOOP) != SELECTOR_SUCCESS
              || selector_set_interest(key->s, key->fd, OP_READ) != SELECTOR_SUCCESS){
                 printf("Error cambiando a interes de lectura");
-                exit(1);
+                    return FINISHED;
              }
     
     return HELLO;

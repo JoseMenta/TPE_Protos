@@ -27,7 +27,8 @@ sigterm_handler(const int signal) {
 
 
 int main(int argc, const char* argv[]){
-    unsigned port = 110;
+    setvbuf(stdout, NULL, _IONBF, 0);
+    unsigned port = 1100;
 
     //No tenemos nada que leer de entrada estandar
     close(STDIN_FILENO);
@@ -56,6 +57,8 @@ int main(int argc, const char* argv[]){
         goto finally;
     }
 
+    printf("pude abrir el socket\n");
+
     fprintf(stdout, "Listening on TCP port %d\n", port);
 
     //SOL_SOCKET -> queremos cambiar propiedades del socket
@@ -77,12 +80,17 @@ int main(int argc, const char* argv[]){
         goto finally;
     }
 
+    printf("Lista la configuracion del socket\n");
+
+
     //Lista la configuracion del socket, ahora pasamos a la configuracion del selector
     
     //Registramos handlers para terminar normalmente en caso de una signal
     signal(SIGTERM, sigterm_handler);
     signal(SIGINT,  sigterm_handler);
     
+
+
     //agrega el flag de O_NONBLOCK a los flags del server para que usarlo sea no bloqueante 
     if(selector_fd_set_nio(server) == -1) {
         err_msg = "getting server socket flags";
@@ -105,6 +113,8 @@ int main(int argc, const char* argv[]){
         err_msg = "initializing selector";
         goto finally;
     }
+
+    printf("selector inicializado\n");
 
     //usando las configuraciones del init, crea un nuevo selector con capacidad para 1024 FD's inicialmente
     selector = selector_new(INITIAL_FDS);
@@ -138,6 +148,8 @@ int main(int argc, const char* argv[]){
             goto finally;
         }
     }
+
+    printf("cerrando todo\n");
 
     //Si llegamos hasta aca sin errores, solo hay que decir que termina el servidor
     if(err_msg == NULL) {

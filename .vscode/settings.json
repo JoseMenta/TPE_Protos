@@ -2,6 +2,7 @@
     "files.associations": {
         "socket.h": "c",
         "stm.h": "c",
-        "selector.h": "c"
+        "selector.h": "c",
+        "types.h": "c"
     }
 }

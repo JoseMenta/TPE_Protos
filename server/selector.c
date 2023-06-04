@@ -412,19 +412,22 @@ finally:
 
 selector_status
 selector_set_interest(fd_selector s, int fd, fd_interest i) {
+    printf("entro en selector_set_intereset\n");
     selector_status ret = SELECTOR_SUCCESS;
-
     if(NULL == s || INVALID_FD(fd)) {
         ret = SELECTOR_IARGS;
         goto finally;
     }
     struct item *item = s->fds + fd;
+    printf("defino item\n");
     if(!ITEM_USED(item)) {
+        printf("error en ITEM_USED\n");
         ret = SELECTOR_IARGS;
         goto finally;
     }
     item->interest = i;
     items_update_fdset_for_fd(s, item);
+    printf("termino selector_set_intereset\n");
 finally:
     return ret;
 }
@@ -452,14 +455,16 @@ handle_iteration(fd_selector s) {
     struct selector_key key = {
         .s = s,
     };
-
+    printf("Esta intentando manejar al fd\n");
     for (int i = 0; i <= n; i++) {
         struct item *item = s->fds + i;
         if(ITEM_USED(item)) {
             key.fd   = item->fd;
             key.data = item->data;
+            printf("Va a ver el fd %d\n",item->fd);
             if(FD_ISSET(item->fd, &s->slave_r)) {
                 if(OP_READ & item->interest) {
+                    printf("Lo ve para lectura\n");
                     if(0 == item->handler->handle_read) {
                         assert(("OP_READ arrived but no handler. bug!" == 0));
                     } else {
@@ -467,8 +472,10 @@ handle_iteration(fd_selector s) {
                     }
                 }
             }
+            printf("Va a ver el fd %d\n",i);
             if(FD_ISSET(i, &s->slave_w)) {
                 if(OP_WRITE & item->interest) {
+                    printf("Lo ve para escritura\n");
                     if(0 == item->handler->handle_write) {
                         assert(("OP_WRITE arrived but no handler. bug!" == 0));
                     } else {

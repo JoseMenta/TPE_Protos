@@ -115,8 +115,11 @@ void pop3_passive_accept(struct selector_key* key){
     printf("Se esta aceptando la conexion\n");
    //Vamos a aceptar la conexion entrante
     pop3* state = NULL;
+    // Se crea la estructura el socket activo para la conexion entrante para una direccion IPv4
     struct sockaddr_in address;
     socklen_t address_len;
+    // Se acepta la conexion entrante, se cargan los datos en el socket activo y se devuelve el fd del socket activo
+    // Este fd será tanto para leer como para escribir en el socket activo
     const int client_fd = accept(key->fd, (struct sockaddr*) &address,&address_len);
     printf("Tenemos el fd para la conexion\n");
     //Si tuvimos un error al crear el socket activo o no lo pudimos hacer no bloqueante
@@ -152,11 +155,13 @@ pop3* pop3_create(){
     pop3* ans = calloc(1,sizeof(pop3));
     //inicializar campos
     printf("Se inicializa la etructura\n");
+    // Se inicializa la maquina de estados para el cliente
     ans->stm.initial = HELLO;
     ans->stm.max_state = ERROR;
     ans->stm.states = state_handlers;
     stm_init(&ans->stm);
 
+    // Se inicializan los buffers para el cliente (uno para leer y otro para escribir)
     buffer_init(&ans->info_read_buff, BUFFER_SIZE ,ans->read_buff);
     buffer_init(&ans->info_write_buff, BUFFER_SIZE ,ans->read_buff);
     printf("Se termina de inicializar la estructura\n");
@@ -165,7 +170,9 @@ pop3* pop3_create(){
 
 void pop3_read(struct selector_key* key){
     printf("Intenta leer\n");
+    // Se obtiene la maquina de estados del cliente asociado al key
     struct state_machine* stm = &(GET_POP3(key)->stm);
+    // Se ejecuta la función de lectura para el estado actual de la maquina de estados
     const pop3_state st = stm_handler_read(stm,key);
     printf("Termina con el estado %d\n",st);
 }
@@ -173,8 +180,9 @@ void pop3_read(struct selector_key* key){
 
 void pop3_write(struct selector_key* key){
     printf("Intenta escribir\n");
+    // Se obtiene la maquina de estados del cliente asociado al key
     struct state_machine* stm = &(GET_POP3(key)->stm);
-
+    // Se ejecuta la función de lectura para el estado actual de la maquina de estados
     const pop3_state st = stm_handler_write(stm,key); 
     printf("Termina con el estado %d\n",st);
 }
@@ -201,6 +209,7 @@ unsigned hello_read(struct selector_key* key){
     size_t max = 0;
     //vamos a guardar lo que leemos en el buffer de entrada
     uint8_t* ptr = buffer_write_ptr(&state->info_write_buff,&max);
+    // Se lee del socket y se guarda en el buffer de entrada (ptr) hasta un maximo de max bytes
     ssize_t read_count = recv(key->fd, ptr, max, 0);
 
     printf("estoy tratando de leer\n");
@@ -232,6 +241,7 @@ unsigned hello_write(struct selector_key* key){
     printf("Entre en la funcion hello_write\n");
 
     size_t max_size = 0;
+    // Se obtiene el puntero del proximo byte a escribir y la cantidad de bytes disponibles para escribir
     uint8_t * ptr = buffer_read_ptr(&state->info_write_buff, &max_size);
     ssize_t sent_count = 0;
 
@@ -240,6 +250,8 @@ unsigned hello_write(struct selector_key* key){
     for(int i = 0; i<max_size; i++){
         if(ptr[i]=='\n'){
             //TODO: Considerar poner MSG_NOSIGNAL para que no mande señales en el cierrre del socket
+
+            // Se escribe por el socket hasta el caracter '\n'
             sent_count = send(key->fd, ptr, i+1, 0);
         }
     }
@@ -251,6 +263,7 @@ unsigned hello_write(struct selector_key* key){
     printf("Ya mande el texto con el \n");
 
 
+    // Se mueve el puntero de lectura del buffer de escritura
     buffer_read_adv(&state->info_write_buff, sent_count);
     
     

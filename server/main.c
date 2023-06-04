@@ -27,7 +27,9 @@ sigterm_handler(const int signal) {
 
 
 int main(int argc, const char* argv[]){
+    // No queremos que se haga buffering de la salida estandar (que se envíe al recibir un \n), sino que se envíe inmediatamente
     setvbuf(stdout, NULL, _IONBF, 0);
+    // Por defecto, el servidor escucha en el puerto 1100
     unsigned port = 1100;
 
     //No tenemos nada que leer de entrada estandar
@@ -41,9 +43,9 @@ int main(int argc, const char* argv[]){
     //Address para hacer el bind del socket
     struct sockaddr_in addr;
     memset(&addr, 0, sizeof(addr));
-    addr.sin_family      = AF_INET;
-    addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    addr.sin_port        = htons(port);
+    addr.sin_family      = AF_INET;             // IPv4
+    addr.sin_addr.s_addr = htonl(INADDR_ANY);   // Todas las interfaces (escucha por cualquier IP)
+    addr.sin_port        = htons(port);         // Server port
 
     //AF_INET -> indica que usa IPV4
     //SOCK_STREAM -> flujo multidireccional de datos confiable
@@ -66,7 +68,7 @@ int main(int argc, const char* argv[]){
     //con el 1, lo mandamos como "habilitado" (recibe un array de opciones)
     setsockopt(server, SOL_SOCKET, SO_REUSEADDR, &(int){ 1 }, sizeof(int));
 
-    //asigna la direccion al fd server
+    //asigna la direccion IP y el puerto al fd server
     //si retorna negativo falla
     if(bind(server, (struct sockaddr*) &addr, sizeof(addr)) < 0) {
         err_msg = "unable to bind socket";

@@ -23,6 +23,8 @@ stm_init(struct state_machine *stm) {
     }
 }
 
+// Maneja el caso en el que se llama a la maquina de estados por primera vez
+// Ejecuta la funcion de entrada del estado inicial
 inline static void
 handle_first(struct state_machine *stm, struct selector_key *key) {
     if(stm->current == NULL) {
@@ -41,11 +43,13 @@ void jump(struct state_machine *stm, unsigned next, struct selector_key *key) {
         abort();
     }
     if(stm->current != stm->states + next) {
+        // Como se va a cambiar de estado, se ejecuta la funcion de salida del estado actual
         if(stm->current != NULL && stm->current->on_departure != NULL) {
             stm->current->on_departure(stm->current->state, key);
         }
         stm->current = stm->states + next;
 
+        // Una vez que se cambio de estado, se ejecuta la funcion de entrada del nuevo estado
         if(NULL != stm->current->on_arrival) {
             stm->current->on_arrival(stm->current->state, key);
         }
@@ -54,11 +58,16 @@ void jump(struct state_machine *stm, unsigned next, struct selector_key *key) {
 
 unsigned
 stm_handler_read(struct state_machine *stm, struct selector_key *key) {
+    // Comprueba si es la primera vez que se llama a la maquina de estados
     handle_first(stm, key);
+    // Si no hay una funcion de lectura definida para el estado actual, aborta
     if(stm->current->on_read_ready == 0) {
         abort();
     }
+    // Ejecuta la funcion de lectura del estado actual
     const unsigned int ret = stm->current->on_read_ready(key);
+    // El resultado de la funcion de lectura es el proximo estado, el cual puede ser el mismo (se mantiene en el mismo estado)
+    // o puede ser otro (en cuyo caso se hara el "jump" al nuevo estado)
     jump(stm, ret, key);
 
     return ret;
@@ -66,11 +75,16 @@ stm_handler_read(struct state_machine *stm, struct selector_key *key) {
 
 unsigned
 stm_handler_write(struct state_machine *stm, struct selector_key *key) {
+    // Comprueba si es la primera vez que se llama a la maquina de estados
     handle_first(stm, key);
+    // Si no hay una funcion de escritura definida para el estado actual, aborta
     if(stm->current->on_write_ready == 0) {
         abort();
     }
+    // Ejecuta la funcion de escritura del estado actual
     const unsigned int ret = stm->current->on_write_ready(key);
+    // El resultado de la funcion de escritura es el proximo estado, el cual puede ser el mismo (se mantiene en el mismo estado)
+    // o puede ser otro (en cuyo caso se hara el "jump" al nuevo estado)
     jump(stm, ret, key);
 
     return ret;
@@ -91,12 +105,16 @@ stm_handler_block(struct state_machine *stm, struct selector_key *key) {
 void
 stm_handler_close(struct state_machine *stm, struct selector_key *key) {
     if(stm->current != NULL && stm->current->on_departure != NULL) {
+        // Solo en el caso de que se haya utilizado la maquina de estados al menos una vez y
+        // que el estado actual tenga una funcion de salida definida, se ejecuta dicha funcion
         stm->current->on_departure(stm->current->state, key);
     }
 }
 
 unsigned
 stm_state(struct state_machine *stm) {
+    // Devuelve el estado actual de la maquina de estados
+    // Si no se utilizo la maquina de estados al menos una vez, devuelve el estado inicial
     unsigned ret = stm->initial;
     if(stm->current != NULL) {
         ret= stm->current->state;

@@ -15,7 +15,7 @@
  *      - describe el estado inicial en `initial'
  *      - todos los posibles estados en `states' (el orden debe coincidir con
  *        el identificador)
- *      - describe la cantidad de estados en `states'.
+ *      - describe la cantidad de estados en `max_state'.
  *
  * Provee todas las funciones necesitadas en un `struct fd_handler'
  * de selector.c.
@@ -79,7 +79,7 @@ stm_handler_write(struct state_machine *stm, struct selector_key *key);
 unsigned
 stm_handler_block(struct state_machine *stm, struct selector_key *key);
 
-/** indica que ocurrió el evento close. retorna nuevo id de nuevo estado. */
+/** indica que ocurrió el evento close. fin del stm */
 void
 stm_handler_close(struct state_machine *stm, struct selector_key *key);
 

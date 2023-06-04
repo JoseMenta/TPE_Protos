@@ -1,5 +1,6 @@
 
 *.o
+.idea
 # Binarios
 bin/*
 # Archivos generados por IDE

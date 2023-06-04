@@ -207,16 +207,17 @@ unsigned hello_read(struct selector_key* key){
             
     if(read_count<=0){
         printf("Error leyendo del socket\n");
-        // exit(1);
+        exit(1);
     }
     for(int i = 0; i<read_count; i++){
         printf("Estoy viendo a %c\n",ptr[i]);
         if(ptr[i]=='\n'){
             printf("Vi un fin de linea \n");
             if( selector_set_interest(key->s,key->fd,OP_NOOP) != SELECTOR_SUCCESS|| 
-                selector_set_interest(key->s,key->fd,OP_WRITE) != SELECTOR_SUCCESS)
+                selector_set_interest(key->s,key->fd,OP_WRITE) != SELECTOR_SUCCESS){
                 printf("Error cambiando el interes del socket para escribir\n");
-                // exit(1);
+                exit(1);
+            }
         }
     }
     printf("Todavia no movi el index del buffer para escritura\n");
@@ -244,7 +245,7 @@ unsigned hello_write(struct selector_key* key){
     }
     if(sent_count == -1){
         printf("Error al escribir en el socket");
-        // exit(1);
+        exit(1);
     }
 
     printf("Ya mande el texto con el \n");
@@ -257,7 +258,7 @@ unsigned hello_write(struct selector_key* key){
     if(selector_set_interest(key->s, key->fd, OP_NOOP) != SELECTOR_SUCCESS
              || selector_set_interest(key->s, key->fd, OP_READ) != SELECTOR_SUCCESS){
                 printf("Error cambiando a interes de lectura");
-                // exit(1);
+                exit(1);
              }
     
     return HELLO;

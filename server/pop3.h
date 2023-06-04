@@ -6,6 +6,7 @@ typedef struct pop3 pop3;
 
 typedef enum{
     NONE,
+    USER,
     RETR,
     RSET,
     ERROR_COMMAND //para escribir el mensaje de error

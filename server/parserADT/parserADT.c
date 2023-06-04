@@ -4,7 +4,6 @@
 #include <stdbool.h>
 
 #include "parserADT.h"
-#include "parserDefinition.h"
 
 #define CMD_LENGTH      4
 #define ARG_MAX_LENGTH  40

@@ -2,6 +2,7 @@
 #define __PARSER_ADT_H__
 
 #include <stdint.h>
+#include "../parserDefinition/parserDefinition.h"
 
 typedef struct parserCDT * parserADT;
 

@@ -16,6 +16,25 @@
 //Esto es lo que vamos a pasar en void* data del selector
 //Vamos a agregar lo que necesitemos, como un array con todos los mails que tiene el usuario
 
+typedef enum{
+    USER,
+    PASS,
+    NONE,
+    RETR,
+    RSET,
+    ERROR_COMMAND //para escribir el mensaje de error
+} pop3_command;
+
+struct command{
+    //chequear argumentos para el comando
+    char* name;
+    bool (*check)(char* arg);
+};
+
+static struct command commands[]={
+        {.name = "USER"},
+        {.name = "PASS"}
+};
 
 struct authorization{
     char * user;
@@ -282,25 +301,43 @@ unsigned hello_read(struct selector_key* key){
         printf("Error leyendo del socket\n");
         return FINISHED;
     }
-    for(int i = 0; i<read_count; i++){
-        printf("Estoy viendo a %c\n",ptr[i]);
-        if(ptr[i]=='\n'){
-            printf("Vi un fin de linea \n");
-            if( selector_set_interest(key->s,key->fd,OP_NOOP) != SELECTOR_SUCCESS|| 
-                selector_set_interest(key->s,key->fd,OP_WRITE) != SELECTOR_SUCCESS){
+    buffer_write_adv(&state->info_write_buff,read_count);
+    uint8_t* ptr = buffer_read_ptr(&state->info_write_buff,&max);
+    for(int i = 0; i<max; i++){
+        aux = parser_feed(ptr[i]);
+        if(aux == FINISHED || aux == ERROR){
+            //o i
+            //guardar en pop3 el enum del comando
+            //strcmp con todos los comandos
+            //llamo a una funcion que me devuelva el comando para el string que me dio el parser
+            //check()
+            if(command>=PASS){
+                //No se puede en authorization
+                state->command = ERROR_COMMAND;
+            }
+            state->command = USER;
+            buffer_read_adv(&state->info_write_buff,i+1);
+            if(selector_set_interest(key->s,key->fd,OP_WRITE) != SELECTOR_SUCCESS){
                 printf("Error cambiando el interes del socket para escribir\n");
                 return FINISHED;
             }
+            return AUTHORIZATION;
         }
     }
     printf("Todavia no movi el index del buffer para escritura\n");
-    buffer_write_adv(&state->info_write_buff,read_count);
+    buffer_read_adv(&state->info_write_buff,max);
     printf("Ya movi el index del buffer para escritura\n");
     return HELLO;
 }
 
 unsigned hello_write(struct selector_key* key){
     pop3* state = GET_POP3(key);
+
+    struct command curr = state->command;
+
+    //escribir lo que necesite en el buffer de salida
+    int finished = curr.exec(state);
+
 
     printf("Entra para imprimir el mensaje de bienvenida");
 

@@ -60,6 +60,7 @@ const char * get_cmd(parserADT p) {
 
 const char * get_arg(parserADT p) {
     char * arg = calloc(p->arg_length+1, sizeof(char));
+    //como usamos calloc para arg_length+1, ya va a tener el \0
     if(arg != NULL) {
         strncpy(arg, p->arg, p->arg_length);
     }
@@ -74,7 +75,7 @@ parser_state parser_feed(parserADT p, uint8_t c) {
     const size_t n                              = p->def->states_n[p->state];
     // Flag para indicar si se encontró una transición que con la condición
     bool matched = false;
-
+    int aux=0;
     for (size_t i = 0; i < n && !matched; i++) {
         switch (state[i].when) {
             case LETTER:
@@ -82,7 +83,7 @@ parser_state parser_feed(parserADT p, uint8_t c) {
                 matched = (c >= ASCII_a && c <= ASCII_z);
                 break;
             case ALPHANUMERIC:
-                char aux = tolower(c);
+                aux = tolower(c);
                 matched = ((aux >= ASCII_0 && aux <= ASCII_9) || (aux >= ASCII_a && aux <= ASCII_z));
                 break;
             case SPACE:
@@ -124,14 +125,14 @@ parser_state parser_feed(parserADT p, uint8_t c) {
                     break;
                 case END:
                     if(p->has_error){
-                        return ERROR;
+                        return PARSER_ERROR;
                     }else{
-                        return FINISHED;
+                        return PARSER_FINISHED;
                     }
                 default:
                     break;
             }
         }
     }
-    return READING;
+    return PARSER_READING;
 }

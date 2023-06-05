@@ -6,7 +6,7 @@
 
 typedef struct parserCDT * parserADT;
 
-typedef enum parser_state { READING = 0, FINISHED, ERROR } parser_state;
+typedef enum parser_state { PARSER_READING = 0, PARSER_FINISHED, PARSER_ERROR } parser_state;
 
 /**
  * Inicializa el parser POP3

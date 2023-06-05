@@ -1,6 +1,6 @@
 include ../Makefile.inc
 
-SOURCES = $(wildcard *.c)
+SOURCES = $(wildcard *.c) $(wildcard **/*.c)
 
 all:
 	$(COMPILER) $(CFLAGS) -o $(SERVER_NAME) $(SOURCES)

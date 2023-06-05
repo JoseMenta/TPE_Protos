@@ -4,37 +4,31 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>
 #include <errno.h>
 #include "selector.h"
 #include "pop3.h"
 #include "buffer.h"
 #include "stm.h"
-#include "buffer.h"
+#include "./parserADT/parserADT.h"
 
 #define WELCOME_MESSAGE "POP3 server\n"
+#define USER_MESSAGE "USER COMMAND\n"
+#define PASS_MESSAGE "PASS COMMAND\n"
+#define ERROR_COMMAND_MESSAGE "INVALID COMMAND\n"
 #define PASSWD_PATH "/etc/passwd"
+
 //Esto es lo que vamos a pasar en void* data del selector
 //Vamos a agregar lo que necesitemos, como un array con todos los mails que tiene el usuario
-
-typedef enum{
-    USER,
-    PASS,
-    NONE,
-    RETR,
-    RSET,
-    ERROR_COMMAND //para escribir el mensaje de error
-} pop3_command;
 
 struct command{
     //chequear argumentos para el comando
     char* name;
-    bool (*check)(char* arg);
+    bool (*check)(const char* arg);
+    int (*action)(pop3* state);
 };
 
-static struct command commands[]={
-        {.name = "USER"},
-        {.name = "PASS"}
-};
+typedef struct command command;
 
 struct authorization{
     char * user;
@@ -55,6 +49,17 @@ struct update{
 //struct email{
 //
 //};
+typedef enum{
+    USER = 0,
+    PASS,
+    STAT,
+    LIST,
+    RETR,
+    DELE,
+    NOOP,
+    QUIT,
+    ERROR_COMMAND //para escribir el mensaje de error
+} pop3_command;
 
 struct pop3{
     pop3_command command;
@@ -64,6 +69,8 @@ struct pop3{
     uint8_t write_buff[BUFFER_SIZE];
     buffer info_read_buff;
     buffer info_write_buff;
+    bool finished;
+    parserADT parser;
     union{
         struct authorization authorization;
         struct transaction transaction;
@@ -110,7 +117,6 @@ typedef enum{
 
 void pop3_done(struct selector_key* key);
 unsigned int hello_write(struct selector_key* key);
-unsigned int hello_read(struct selector_key* key);
 unsigned int authorization_read(struct selector_key* key);
 unsigned int authorization_write(struct selector_key* key);
 void transaction_arrival(const unsigned state, struct selector_key *key);
@@ -120,12 +126,74 @@ void update_arrival(const unsigned state, struct selector_key *key);
 unsigned int update_write(struct selector_key* key);
 void pop3_destroy(pop3* state);
 pop3* pop3_create();
+bool have_argument(const char* arg);
+bool might_argument(const char* arg);
+bool not_argument(const char* arg);
+pop3_command get_command(const char* command);
+int user_action(pop3* state);
+int pass_action(pop3* state);
+int stat_action(pop3* state);
+int list_action(pop3* state);
+int retr_action(pop3* state);
+int dele_action(pop3* state);
+int user_validation(pop3* state);
+int dele_action(pop3* state);
+int noop_action(pop3* state);
+int quit_action(pop3* state);
+int default_action(pop3* state);
 
+
+static struct command commands[]={
+        {
+            .name = "USER",
+            .check = have_argument,
+            .action = user_action
+        },
+        {
+            .name = "PASS",
+            .check = have_argument,
+            .action = pass_action
+        },
+        {
+            .name = "STAT",
+            .check = not_argument,
+            .action = stat_action
+        },
+        {
+            .name = "LIST",
+            .check = might_argument,
+            .action = list_action
+        },
+        {
+            .name = "RETR",
+            .check = have_argument,
+            .action = retr_action
+        },
+        {
+            .name = "DELE",
+            .check = have_argument,
+            .action = dele_action
+        },
+        {
+            .name = "NOOP",
+            .check = not_argument,
+            .action = noop_action
+        },
+        {
+            .name = "QUIT",
+            .check = not_argument,
+            .action = quit_action
+        },
+        {
+            .name = NULL, //no deberia llegar aca
+            .check = might_argument,
+            .action = default_action
+        }
+};
 
 static const struct state_definition state_handlers[] ={
     {
         .state = HELLO,
-        .on_read_ready = hello_read,
         .on_write_ready = hello_write
     },
     {
@@ -150,7 +218,7 @@ static const struct state_definition state_handlers[] ={
     {
         .state = ERROR,
     }
-    
+
 };
 
 //fd_handler que van a usar todas las conexiones al servidor (que usen el   socket pasivo de pop3)
@@ -184,7 +252,7 @@ void pop3_passive_accept(struct selector_key* key) {
         printf("Fallo el flag no bloqueante");
         goto fail;
     }
-    
+
     if((state = pop3_create())==NULL){
         printf("Fallo el create");
         goto fail;
@@ -213,6 +281,7 @@ fail:
 //crea la estructura para manejar el estado del servidor
 pop3* pop3_create(){
     pop3* ans = calloc(1,sizeof(pop3));
+    //TODO: chequear errores de asignacion de memoria
     //inicializar campos
     printf("Se inicializa la etructura\n");
     // Se inicializa la maquina de estados para el cliente
@@ -220,6 +289,7 @@ pop3* pop3_create(){
     ans->stm.max_state = ERROR;
     ans->stm.states = state_handlers;
     stm_init(&ans->stm);
+    ans->parser = parser_init();
 
     // Se inicializan los buffers para el cliente (uno para leer y otro para escribir)
     buffer_init(&(ans->info_read_buff), BUFFER_SIZE ,ans->read_buff);
@@ -253,7 +323,7 @@ void pop3_write(struct selector_key* key){
     // Se obtiene la maquina de estados del cliente asociado al key
     struct state_machine* stm = &(GET_POP3(key)->stm);
     // Se ejecuta la función de lectura para el estado actual de la maquina de estados
-    const pop3_state st = stm_handler_write(stm,key); 
+    const pop3_state st = stm_handler_write(stm,key);
     printf("Termina con el estado %d\n",st);
 
     if(FINISHED == st){
@@ -285,38 +355,99 @@ void pop3_destroy(pop3* state){
     free(state);
 }
 
-unsigned hello_read(struct selector_key* key){
+unsigned hello_write(struct selector_key* key){
     pop3* state = GET_POP3(key);
-    
-    //Obtenemos el buffer para leer
+    size_t  max = 0;
+    uint8_t* ptr = buffer_read_ptr(&(state->info_write_buff),&max);
+    ssize_t sent_count = send(key->fd,ptr,max,0);
+
+    if(sent_count == -1){
+        printf("Error al escribir en el socket");
+        return FINISHED;
+    }
+    buffer_read_adv(&(state->info_write_buff),sent_count);
+
+    //Si ya no hay mas para escribir y el comando termino de generar la respuesta
+    if(!buffer_can_read(&(state->info_write_buff))){
+        if(selector_set_interest(key->s,key->fd,OP_READ) != SELECTOR_SUCCESS){
+            printf("Error cambiando el interes del socket para leer\n");
+            return FINISHED;
+        }
+    }
+    return AUTHORIZATION;
+}
+
+bool have_argument(const char* arg){
+    printf("Entro en la funcion de have_argument con el argumento '%s'\n", arg);
+    bool aux = strlen(arg)!=0;
+    if(aux){
+        printf("true");
+    }else{
+        printf("false");
+    }
+    return aux;
+}
+
+bool might_argument(const char* arg){
+    printf("Entro en la funcion de might_argument con el argumento '%s'\n", arg);
+    return true;
+}
+
+bool not_argument(const char* arg){
+    printf("Entro a la funcion not_argument con el argumento '%s'\n", arg);
+    return arg == NULL || strlen(arg) == 0;
+}
+
+pop3_command get_command(const char* command){
+    for(int i = USER; i<QUIT; i++){
+        if(strncasecmp(command,commands[i].name,4)==0){
+            return i;
+        }
+    }
+    return ERROR_COMMAND;
+}
+
+unsigned authorization_read(struct selector_key* key){
+    printf("Entra a authorization a leer\n");
+    pop3* state = GET_POP3(key);
+    //Guardamos lo que leemos en el buffer de entrada
     size_t max = 0;
-    //vamos a guardar lo que leemos en el buffer de entrada
-    uint8_t* ptr = buffer_write_ptr(&state->info_write_buff,&max);
-    // Se lee del socket y se guarda en el buffer de entrada (ptr) hasta un maximo de max bytes
+    uint8_t* ptr = buffer_write_ptr(&(state->info_read_buff),&max);
     ssize_t read_count = recv(key->fd, ptr, max, 0);
 
     printf("estoy tratando de leer\n");
-            
+
     if(read_count<=0){
         printf("Error leyendo del socket\n");
         return FINISHED;
     }
-    buffer_write_adv(&state->info_write_buff,read_count);
-    uint8_t* ptr = buffer_read_ptr(&state->info_write_buff,&max);
-    for(int i = 0; i<max; i++){
-        aux = parser_feed(ptr[i]);
-        if(aux == FINISHED || aux == ERROR){
-            //o i
-            //guardar en pop3 el enum del comando
-            //strcmp con todos los comandos
-            //llamo a una funcion que me devuelva el comando para el string que me dio el parser
-            //check()
-            if(command>=PASS){
-                //No se puede en authorization
+    //Avanzamos la escritura en el buffer
+    buffer_write_adv(&(state->info_read_buff),read_count);
+    //Obtenemos un puntero para lectura
+    ptr = buffer_read_ptr(&(state->info_read_buff),&max);
+    for(size_t i = 0; i<max; i++){
+        printf("El parser lee %c ",ptr[i]);
+        parser_state parser = parser_feed(state->parser, ptr[i]);
+        printf("Llega al estad %d del parser\n",parser);
+        if(parser == PARSER_FINISHED || parser == PARSER_ERROR){
+            printf("El parse llega a un estado final");
+            //avanzamos solo hasta el fin del comando
+            buffer_read_adv(&(state->info_read_buff),i+1);
+            const char* parser_command = get_cmd(state->parser);
+            pop3_command command = get_command(parser_command);
+            printf("\nObtiene el commando %d\n",command);
+            state->command = command;
+            if(command == ERROR_COMMAND || !commands[command].check(get_arg(state->parser))){
+                printf("No es un comando valido");
                 state->command = ERROR_COMMAND;
             }
-            state->command = USER;
-            buffer_read_adv(&state->info_write_buff,i+1);
+            if(!(command == USER || command == PASS)){
+                printf("Comando no permitido\n");
+                //No se puede en la etapa de authorization
+                state->command = ERROR_COMMAND;
+            }
+            parser_reset(state->parser);
+            //Vamos a procesar la respuesta
             if(selector_set_interest(key->s,key->fd,OP_WRITE) != SELECTOR_SUCCESS){
                 printf("Error cambiando el interes del socket para escribir\n");
                 return FINISHED;
@@ -324,95 +455,94 @@ unsigned hello_read(struct selector_key* key){
             return AUTHORIZATION;
         }
     }
-    printf("Todavia no movi el index del buffer para escritura\n");
-    buffer_read_adv(&state->info_write_buff,max);
+    //Avanzamos en el buffer, leimos lo que tenia
+    buffer_read_adv(&state->info_read_buff,max);
     printf("Ya movi el index del buffer para escritura\n");
-    return HELLO;
+    return AUTHORIZATION;
 }
 
-unsigned hello_write(struct selector_key* key){
+unsigned authorization_write(struct selector_key* key){
+    printf("Entre a escribir en authorization\n");
     pop3* state = GET_POP3(key);
-
-    struct command curr = state->command;
-
-    //escribir lo que necesite en el buffer de salida
-    int finished = curr.exec(state);
-
-
-    printf("Entra para imprimir el mensaje de bienvenida");
-
+    //ejecutamos la funcion para generar la respuesta, que va a setear a state->finished como corresponda
+    command current_command = commands[state->command];
+    current_command.action(state); //ejecutamos la accion
+    printf("Ejecute el comando\n");
+    //Escribimos lo que tenemos en el buffer de salida al socket
     size_t  max = 0;
     uint8_t* ptr = buffer_read_ptr(&(state->info_write_buff),&max);
+    ssize_t sent_count = send(key->fd,ptr,max,0);
 
-//    if(max==0){
-//        //Ya leimos todo lo que podiamos leer
-//        return AUTHORIZATION;
-//    }
-
-    ssize_t sent_count = 0;
-
-    sent_count = send(key->fd,ptr,max,0);
+    printf("Ya deberiamos haber mandado el mensaje\n");
 
     if(sent_count == -1){
-        //Cerrar la conexion
-//        exit(1);
         printf("Error al escribir en el socket");
         return FINISHED;
     }
-
     buffer_read_adv(&(state->info_write_buff),sent_count);
-    if(!buffer_can_read(&(state->info_write_buff))){
-        if(selector_set_interest(key->s,key->fd,OP_READ)!=SELECTOR_SUCCESS){
-            printf("Error cambiando el estado a read\n");
+    printf("Avanzamos el puntero de lectura en el buffer de escritura\n");
+    //Si ya no hay mas para escribir y el comando termino de generar la respuesta
+    if(!buffer_can_read(&(state->info_write_buff)) && state->finished){
+        state->finished = false;
+        if(selector_set_interest(key->s,key->fd,OP_READ) != SELECTOR_SUCCESS){
+            printf("Error cambiando el interes del socket para leer\n");
             return FINISHED;
         }
-        return HELLO;
+        printf("Cambio al interes de lectura\n");
     }
-    return HELLO;
-//    pop3* state = GET_POP3(key);
-//
-//    printf("Entre en la funcion hello_write\n");
-//
-//    size_t max_size = 0;
-//    // Se obtiene el puntero del proximo byte a escribir y la cantidad de bytes disponibles para escribir
-//    uint8_t * ptr = buffer_read_ptr(&state->info_write_buff, &max_size);
-//    ssize_t sent_count = 0;
-//
-//    printf("estoy tratando de escribir\n");
-//
-//    for(int i = 0; i<max_size; i++){
-//        if(ptr[i]=='\n'){
-//            //TODO: Considerar poner MSG_NOSIGNAL para que no mande señales en el cierrre del socket
-//
-//            // Se escribe por el socket hasta el caracter '\n'
-//            sent_count = send(key->fd, ptr, i+1, 0);
-//        }
-//    }
-//    if(sent_count == -1){
-//        printf("Error al escribir en el socket");
-//        exit(1);
-//    }
-//
-//    printf("Ya mande el texto con el \n");
-//
-//
-//    // Se mueve el puntero de lectura del buffer de escritura
-//    buffer_read_adv(&state->info_write_buff, sent_count);
-//
-//
-//
-//    if(selector_set_interest(key->s, key->fd, OP_NOOP) != SELECTOR_SUCCESS
-//             || selector_set_interest(key->s, key->fd, OP_READ) != SELECTOR_SUCCESS){
-//                printf("Error cambiando a interes de lectura");
-//                exit(1);
-//             }
-//
-//    return HELLO;
+    //TODO: agregar logica para volver cuando termine
+    return AUTHORIZATION;
 }
 
 
-unsigned authorization_read(struct selector_key* key){}
-unsigned authorization_write(struct selector_key* key){}
+
+int user_action(pop3* state){
+    printf("Entro a user_action\n");
+    size_t max = 0;
+    uint8_t * ptr = buffer_write_ptr(&(state->info_write_buff),&max);
+    strncpy((char*)ptr, USER_MESSAGE, max);
+    buffer_write_adv(&(state->info_write_buff),strlen(USER_MESSAGE));
+    state->finished = true;
+    printf("Salgo de user_action\n");
+    return 0;
+}
+
+int pass_action(pop3* state){
+    printf("Entro a pass action\n");
+    size_t max = 0;
+    uint8_t * ptr = buffer_write_ptr(&(state->info_write_buff),&max);
+    strncpy((char*)ptr, PASS_MESSAGE,max);
+    buffer_write_adv(&(state->info_write_buff),strlen(PASS_MESSAGE));
+    state->finished = true;
+    printf("Salgo de pass_action\n");
+    return  0;
+}
+
+int stat_action(pop3* state){
+    printf("Entro a stat action\n");
+    size_t max = 0;
+    uint8_t * ptr = buffer_write_ptr(&(state->info_write_buff),&max);
+    strncpy((char*)ptr, PASS_MESSAGE, max);
+    buffer_write_adv(&(state->info_write_buff),strlen(PASS_MESSAGE));
+    state->finished = true;
+    return  0;
+}
+int default_action(pop3* state){
+    printf("Entro a default action\n");
+    size_t max = 0;
+    uint8_t * ptr = buffer_write_ptr(&(state->info_write_buff),&max);
+    strncpy((char*)ptr, ERROR_COMMAND_MESSAGE, max);
+    buffer_write_adv(&(state->info_write_buff),strlen(ERROR_COMMAND_MESSAGE));
+    state->finished = true;
+    return 0;
+}
+
+int list_action(pop3* state){}
+int retr_action(pop3* state){}
+int user_validation(pop3* state){}
+int dele_action(pop3* state){}
+int noop_action(pop3* state){}
+int quit_action(pop3* state){}
 void transaction_arrival(const unsigned state, struct selector_key *key){}
 unsigned transaction_write(struct selector_key* key){}
 unsigned transaction_read(struct selector_key* key){}

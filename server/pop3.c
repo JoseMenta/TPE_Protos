@@ -485,9 +485,7 @@ unsigned int write_response(struct selector_key* key){
     //Va a volver a donde esta, tiene que seguir escribiendo
     return WRITING_RESPONSE;
 }
-unsigned int process_response(struct  selector_key* key){
-
-}
+unsigned int process_response(struct  selector_key* key){}
 
 bool check_command_for_protocol_state(protocol_state pop3_protocol_state, pop3_command command){
     switch (pop3_protocol_state) {

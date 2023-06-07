@@ -2,16 +2,6 @@
 #include <string.h>
 #include "usersADT.h"
 
-typedef struct{
-    const char *name;
-    char *pass;
-} user_t;
-
-struct usersCDT {
-    user_t * users_array;
-    unsigned int array_length;
-    unsigned int users_count;
-};
 
 static int usersADT_find_user(usersADT u, const char * user_name);
 
@@ -30,39 +20,47 @@ usersADT usersADT_init(){
     return u;
 }
 
+void usersADT_destroy(usersADT u) {
+    for(unsigned int i = 0; i < u->users_count; i++) {
+        free((char *) u->users_array[u->users_count].name);
+        free(u->users_array[u->users_count].pass);
+    }
+    free(u->users_array);
+    free(u);
+}
+
 int usersADT_add(usersADT u, const char * user_name, const char * user_pass) {
     if(usersADT_find_user(u,user_name) == -1){
         return -1;
     }
-    user_t user = NULL;
     char * name = NULL;
     char * pass = NULL;
-    user = calloc(1, sizeof(user_t));
-    if(user == NULL) {
+    unsigned int name_length = strlen(user_name);
+    name = calloc(name_length + 1, sizeof(char));
+    if(name == NULL) {
         goto error;
     }
-    int name_length = strlen(user_name);
-    name = calloc(name_length + 1, sizeof(char));
-    if(name == NUL)
     strncpy(name, user_name, name_length);
-    user.pass = (char *) user_pass;
-    user.name = user_name;
-    u->users_count++;
+    unsigned int pass_length = strlen(user_pass);
+    pass = calloc(pass_length + 1, sizeof(char));
+    if(pass == NULL) {
+        goto error;
+    }
+    strncpy(pass, user_pass, pass_length);
     if(u->users_count == u->array_length){
         user_t * aux = realloc(u->users_array, sizeof(user_t)*(u->array_length + CHUNK));
         if(aux == NULL) {
-            return -2;
+            goto error;
         }
         u->users_array = aux;
         u->array_length += CHUNK;
     }
-    u->users_array[u->users_count] = user;
+    u->users_array[u->users_count].name = name;
+    u->users_array[u->users_count].pass = pass;
+    u->users_count++;
     return 0;
 
     error:
-        if(user != NULL) {
-            free(user);
-        }
         if(name != NULL) {
             free(name);
         }
@@ -73,9 +71,9 @@ int usersADT_add(usersADT u, const char * user_name, const char * user_pass) {
 }
 
 char * usersADT_get_user_mail_path(usersADT u, const char * base_path, const char * user_name) {
-    int user_index = usersADT_user_exists(u, user_name);
+    unsigned int user_index = usersADT_find_user(u, user_name);
     if(user_index) {
-        return -1;
+        return NULL;
     }
     unsigned int base_path_len = strlen(base_path);
     unsigned int user_name_len = strlen(user_name);
@@ -90,7 +88,7 @@ char * usersADT_get_user_mail_path(usersADT u, const char * base_path, const cha
 }
 
 bool usersADT_validate(usersADT u, const char * user_name, const char * user_pass) {
-    int user_index = usersADT_user_exists(u, user_name);
+    int user_index = usersADT_find_user(u, user_name);
     if(user_index == -1){
         return false;
     }
@@ -99,7 +97,7 @@ bool usersADT_validate(usersADT u, const char * user_name, const char * user_pas
 
 bool usersADT_update_pass(usersADT u, const char * user_name, const char * new_pass){
     for(unsigned int i = 0; i < u->users_count; i++){
-        if(strcmp(u->users_array[i].name,user)){
+        if(strcmp(u->users_array[i].name, user_name)){
             strcpy(u->users_array[i].pass, new_pass);
             return true;
         }

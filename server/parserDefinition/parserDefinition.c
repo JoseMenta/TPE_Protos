@@ -40,7 +40,7 @@ static const struct parser_state_transition ST_CMD_4 [] =  {
         {.when = ANY,                 .dest = ERRST,          .type=ERR},
 };
 static const struct parser_state_transition ST_ARG [] =  {
-        {.when = ALPHANUMERIC,        .dest = ARGST,          .type=ARG},
+        {.when = PRINTABLE,           .dest = ARGST,          .type=ARG},
         {.when = CR,                  .dest = MAYEND,       .type=OTHER},
         {.when = ANY,                 .dest = ERRST,          .type=ERR},
 };

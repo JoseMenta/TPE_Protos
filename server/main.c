@@ -28,13 +28,13 @@ sigterm_handler(const int signal) {
 
 int main(int argc, const char* argv[]) {
 
-    struct pop3args pop3_args = malloc(sizeof(struct pop3args));
+    struct pop3args* pop3_args = malloc(sizeof(struct pop3args));
     parse_args(argc, argv, pop3_args);
 
     // No queremos que se haga buffering de la salida estandar (que se envíe al recibir un \n), sino que se envíe inmediatamente
     setvbuf(stdout, NULL, _IONBF, 0);
     // Por defecto, el servidor escucha en el puerto 1100
-    unsigned port = 1100;
+    unsigned port = pop3_args->pop3_port;
 
     //No tenemos nada que leer de entrada estandar
     close(STDIN_FILENO);

@@ -5,15 +5,15 @@
 
 #include "parserADT.h"
 
-#define CMD_LENGTH      4
-#define ARG_MAX_LENGTH  40
-#define ASCII_a         0x61
-#define ASCII_z         0x7A
-#define ASCII_0         0x30
-#define ASCII_9         0x39
-#define ASCII_SPACE     0x20
-#define ASCII_CR        0x0D
-#define ASCII_LF        0X0A
+#define CMD_LENGTH                  4
+#define ARG_MAX_LENGTH              40
+#define ASCII_a                     0x61
+#define ASCII_z                     0x7A
+#define ASCII_PRINTABLE_MIN         0x21
+#define ASCII_PRINTABLE_MAX         0x7E
+#define ASCII_SPACE                 0x20
+#define ASCII_CR                    0x0D
+#define ASCII_LF                    0X0A
 
 typedef struct parserCDT {
     const struct parser_definition *    def;                    // Automata
@@ -82,9 +82,8 @@ parser_state parser_feed(parserADT p, uint8_t c) {
                 c = tolower(c);
                 matched = (c >= ASCII_a && c <= ASCII_z);
                 break;
-            case ALPHANUMERIC:
-                aux = tolower(c);
-                matched = ((aux >= ASCII_0 && aux <= ASCII_9) || (aux >= ASCII_a && aux <= ASCII_z));
+            case PRINTABLE:
+                matched = (c >= ASCII_PRINTABLE_MIN && c <= ASCII_PRINTABLE_MAX);
                 break;
             case SPACE:
                 matched = (c == ASCII_SPACE);

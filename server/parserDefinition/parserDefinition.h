@@ -5,7 +5,7 @@
 #include <stdint.h>
 #include <stddef.h>
 
-typedef enum parser_type { LETTER, ALPHANUMERIC, SPACE, CR, LF, ANY} parser_type;
+typedef enum parser_type { LETTER, PRINTABLE, SPACE, CR, LF, ANY} parser_type;
 typedef enum cmd_type { CMD, ARG, END, ERR, OTHER } cmd_type;
 
 /** describe una transición entre estados  */

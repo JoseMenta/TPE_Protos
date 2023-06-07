@@ -1,7 +1,20 @@
 #ifndef TP_USERSADT_H
 #define TP_USERSADT_H
 
+#include <stdbool.h>
+
 #define CHUNK 10
+
+typedef struct{
+    const char *name;
+    char *pass;
+} user_t;
+
+struct usersCDT {
+    user_t * users_array;
+    unsigned int array_length;
+    unsigned int users_count;
+};
 
 typedef struct usersCDT * usersADT;
 
@@ -11,6 +24,11 @@ typedef struct usersCDT * usersADT;
  * Retorna la estructura
  */
 usersADT usersADT_init();
+
+/*
+ * Libera los recursos utilizados en la estructura
+ */
+void usersADT_destroy(usersADT u);
 
 /*
  * Agrega un usuario

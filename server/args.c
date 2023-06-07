@@ -4,7 +4,6 @@
 #include <string.h>    /* memset */
 #include <errno.h>
 #include <getopt.h>
-
 #include "args.h"
 
 static unsigned short port(const char *s);
@@ -31,6 +30,19 @@ static char * path(const char * path){
     char * ret_str = malloc(path_len+1);
     strncpy(ret_str, path, path_len);
     return ret_str;
+}
+
+static void user(char *s, char ** user_name, char ** user_pass) {
+    char *p = strchr(s, ':');
+    if(p == NULL) {
+        fprintf(stderr, "password not found for '%s'\n", s);
+        exit(1);
+    } else {
+        *p = 0;
+        p++;
+        *user_name = s;
+        *user_pass = p;
+    }
 }
 
 static void
@@ -62,18 +74,13 @@ parse_args(const int argc, const char **argv, struct pop3args *args) {
     args->pop3_port = DEFAULT_POP3_PORT;
     args->pop3_config_port = DEFAULT_POP3_CONFIG_PORT;
     args->maildir_path = DEFAULT_MAILDIR_PATH;
-    args->users = userADT_init();
+    args->users = usersADT_init();
 
     int c;
     int nusers = 0;
 
     while (true) {
-        int option_index = 0;
-        static struct option long_options[] = {
-            { 0,           0,                 0, 0 }
-        };
-
-        c = getopt(argc, argv, "hp:P:u:vd:");
+        c = getopt(argc, (char *const *) argv, "hp:P:u:vd:");
         if (c == -1) {
             break;
         }
@@ -93,7 +100,9 @@ parse_args(const int argc, const char **argv, struct pop3args *args) {
                     fprintf(stderr, "maximun number of command line users reached: %d.\n", MAX_USERS);
                     exit(1);
                 } else {
-                    userADT_add(args->users, optarg);
+                    char * user_name, * user_pass;
+                    user(optarg, &user_name, &user_pass);
+                    usersADT_add(args->users, user_name, user_pass);
                     nusers++;
                 }
                 break;

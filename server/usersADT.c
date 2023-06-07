@@ -30,21 +30,46 @@ usersADT usersADT_init(){
     return u;
 }
 
-bool usersADT_add(usersADT u, const char * user_name, const char * user_pass) {
+int usersADT_add(usersADT u, const char * user_name, const char * user_pass) {
     if(usersADT_find_user(u,user_name) == -1){
-        return false;
-    }else{
-        user_t user = calloc(1, sizeof(user_t));
-        user.pass = (char *) user_pass;
-        user.name = user_name;
-        u->users_count++;
-        if(u->users_count == u->array_length){
-            user_t * aux = realloc(u->users_array, sizeof(user_t)*(u->array_length + CHUNK));
-            if(aux != NULL)
-        }
-        u->users_array[u->users_count] = user;
+        return -1;
     }
-    return true;
+    user_t user = NULL;
+    char * name = NULL;
+    char * pass = NULL;
+    user = calloc(1, sizeof(user_t));
+    if(user == NULL) {
+        goto error;
+    }
+    int name_length = strlen(user_name);
+    name = calloc(name_length + 1, sizeof(char));
+    if(name == NUL)
+    strncpy(name, user_name, name_length);
+    user.pass = (char *) user_pass;
+    user.name = user_name;
+    u->users_count++;
+    if(u->users_count == u->array_length){
+        user_t * aux = realloc(u->users_array, sizeof(user_t)*(u->array_length + CHUNK));
+        if(aux == NULL) {
+            return -2;
+        }
+        u->users_array = aux;
+        u->array_length += CHUNK;
+    }
+    u->users_array[u->users_count] = user;
+    return 0;
+
+    error:
+        if(user != NULL) {
+            free(user);
+        }
+        if(name != NULL) {
+            free(name);
+        }
+        if(pass != NULL) {
+            free(pass);
+        }
+        return -2;
 }
 
 char * usersADT_get_user_mail_path(usersADT u, const char * base_path, const char * user_name) {

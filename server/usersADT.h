@@ -15,10 +15,11 @@ usersADT usersADT_init();
 /*
  * Agrega un usuario
  *
- * Retorna true si pudo agregar el usuario
- * Retorna false si el usuario ya existe
+ * Retorna 0 si pudo agregar el usuario
+ * Retorna -1 si el usuario ya existe
+ * Retorna -2 si hubo problemas para agregar el usuario
  */
-bool usersADT_add(usersADT u, const char * user_name, const char * user_pass);
+int usersADT_add(usersADT u, const char * user_name, const char * user_pass);
 
 /*
  * Dado el basepath del directorio, devuelve el path al Maildir del usuario

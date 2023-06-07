@@ -1,5 +1,7 @@
-#include <sys/types.h>   // socket
+#include <sys/types.h>   // socket, opendir
 #include <sys/socket.h>  // socket
+#include <sys/stat.h> //stat
+#include <dirent.h> //readdir
 #include <netinet/in.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -17,7 +19,7 @@
 #define PASS_MESSAGE "PASS COMMAND\n"
 #define ERROR_COMMAND_MESSAGE "INVALID COMMAND\n"
 #define PASSWD_PATH "/etc/passwd"
-
+#define MAILDIR = "/home/jmentasti/maildir"
 //Esto es lo que vamos a pasar en void* data del selector
 //Vamos a agregar lo que necesitemos, como un array con todos los mails que tiene el usuario
 
@@ -45,10 +47,12 @@ struct update{
     int i;
 };
 
-//typedef struct email email;
-//struct email{
-//
-//};
+typedef struct email email;
+struct email{
+    char* name; //to open the file later
+    off_t size; //es un int
+    bool deleted;
+};
 typedef enum{
     USER = 0,
     PASS,
@@ -61,10 +65,16 @@ typedef enum{
     ERROR_COMMAND //para escribir el mensaje de error
 } pop3_command;
 
+typedef enum{
+    AUTHORIZATION,
+    TRANSACTION,
+    UPDATE
+}protocol_state;
+
 struct pop3{
     pop3_command command;
     struct state_machine stm;
-
+    protocol_state pop3_protocol_state;
     uint8_t read_buff[BUFFER_SIZE];
     uint8_t write_buff[BUFFER_SIZE];
     buffer info_read_buff;
@@ -84,22 +94,22 @@ typedef enum{
     * HELLO: estado justo luego de establecer la conexión
     * Se usa para imprimir el mensaje de bienvenida
     */
-    HELLO, 
+    HELLO,
     /*
-    * AUTHORIZATION: estado de autorizacion del usuario
-    * Se presenta cuando se obtienen las credenciales 
-    */
-    AUTHORIZATION,
+     * READING_REQUEST: estado donde esta leyendo informacion del socket
+     * Se usa para indicar que se tiene que leer del socket
+     */
+    READING_REQUEST,
     /*
-    * TRANSACTION: estado de transacciones del usuario
-    * Se presenta cuando el usuario ejecuta comandos para obtener sus correos
-    */
-    TRANSACTION,
+     * WRITING_RESPONSE: estando donde se esta escribiendo la respuesta en el buffer de salida y se escribe en el socket
+     * Se usa para llevar la respuesta generada al cliente
+     */
+    WRITING_RESPONSE,
     /*
-    * UPDATE: estado de actualizacion del usuario
-    * Se presenta cuando se estan efectuando los cambios realizados por el usuario
-    */
-    UPDATE,
+     * PROCESSING_RESPONSE: estado donde se esta leyendo de un archivo para hacer el RETR
+     * Se usa para dejar los contenidos del archivo en un buffer intermedio, logrando no bloquearse en la lectura del archivo
+     */
+    PROCESSING_RESPONSE,
     /*
     * FINISHED: estado de finalización de la interaccion
     * Se presenta cuando termina la etapa de actualizacion
@@ -117,19 +127,16 @@ typedef enum{
 
 void pop3_done(struct selector_key* key);
 unsigned int hello_write(struct selector_key* key);
-unsigned int authorization_read(struct selector_key* key);
-unsigned int authorization_write(struct selector_key* key);
-void transaction_arrival(const unsigned state, struct selector_key *key);
-unsigned int transaction_write(struct selector_key* key);
-unsigned int transaction_read(struct selector_key* key);
-void update_arrival(const unsigned state, struct selector_key *key);
-unsigned int update_write(struct selector_key* key);
+unsigned int read_request(struct selector_key* key);
+unsigned int write_response(struct selector_key* key);
+unsigned int process_response(struct  selector_key* key);
 void pop3_destroy(pop3* state);
 pop3* pop3_create();
 bool have_argument(const char* arg);
 bool might_argument(const char* arg);
 bool not_argument(const char* arg);
 pop3_command get_command(const char* command);
+bool check_command_for_protocol_state(protocol_state pop3_protocol_state, pop3_command command);
 int user_action(pop3* state);
 int pass_action(pop3* state);
 int stat_action(pop3* state);
@@ -197,20 +204,16 @@ static const struct state_definition state_handlers[] ={
         .on_write_ready = hello_write
     },
     {
-        .state = AUTHORIZATION,
-        .on_read_ready = authorization_read,
-        .on_write_ready = authorization_write
+        .state = READING_REQUEST,
+        .on_read_ready = read_request,
     },
     {
-        .state = TRANSACTION,
-        .on_arrival = transaction_arrival,
-        .on_write_ready = transaction_write,
-        .on_read_ready = transaction_read
+        .state = WRITING_RESPONSE,
+        .on_write_ready = write_response,
     },
     {
-        .state = UPDATE,
-        .on_arrival = update_arrival,
-        .on_write_ready = update_write //escribimos el mensaje final
+        .state = PROCESSING_RESPONSE,
+        .on_read_ready = process_response ,
     },
     {
         .state = FINISHED,
@@ -281,10 +284,12 @@ fail:
 //crea la estructura para manejar el estado del servidor
 pop3* pop3_create(){
     pop3* ans = calloc(1,sizeof(pop3));
-    //TODO: chequear errores de asignacion de memoria
-    //inicializar campos
-    printf("Se inicializa la etructura\n");
+    if(ans == NULL || errno == ENOMEM){ //errno por optimismo Linux
+        printf("Error al reservar memoria para el estado");
+        return NULL;
+    }
     // Se inicializa la maquina de estados para el cliente
+    ans->pop3_protocol_state = AUTHORIZATION;
     ans->stm.initial = HELLO;
     ans->stm.max_state = ERROR;
     ans->stm.states = state_handlers;
@@ -374,7 +379,127 @@ unsigned hello_write(struct selector_key* key){
             return FINISHED;
         }
     }
-    return AUTHORIZATION;
+    return READING_REQUEST;
+}
+
+unsigned int read_request(struct selector_key* key){
+    printf("Entra a leer el request!!\n");
+    pop3* state = GET_POP3(key);
+    //Guardamos lo que leemos del socket en el buffer de entrada
+    size_t max = 0;
+    uint8_t* ptr = buffer_write_ptr(&(state->info_read_buff),&max);
+    ssize_t read_count = recv(key->fd, ptr, max, 0);
+
+    if(read_count<=0){
+        printf("Error leyendo del socket\n");
+        return FINISHED;
+    }
+    //Avanzamos la escritura en el buffer
+    buffer_write_adv(&(state->info_read_buff),read_count);
+    //Obtenemos un puntero para lectura
+    ptr = buffer_read_ptr(&(state->info_read_buff),&max);
+    for(size_t i = 0; i<max; i++){
+        parser_state parser = parser_feed(state->parser, ptr[i]);
+        if(parser == PARSER_FINISHED || parser == PARSER_ERROR){
+            //avanzamos solo hasta el fin del comando
+            buffer_read_adv(&(state->info_read_buff),i+1);
+            const char* parser_command = get_cmd(state->parser);
+            pop3_command command = get_command(parser_command);
+            state->command = command;
+            if(parser == PARSER_ERROR || command == ERROR_COMMAND || !commands[command].check(get_arg(state->parser))){
+                printf("No es un comando valido");
+                state->command = ERROR_COMMAND;
+            }
+            if(!check_command_for_protocol_state(state->pop3_protocol_state, command)){
+                printf("Comando no permitido\n");
+                state->command = ERROR_COMMAND;
+            }
+            parser_reset(state->parser);
+            //Vamos a procesar la respuesta
+            if(selector_set_interest(key->s,key->fd,OP_WRITE) != SELECTOR_SUCCESS){
+                printf("Error cambiando el interes del socket para escribir\n");
+                return FINISHED;
+            }
+            return WRITING_RESPONSE; //vamos a escribir la respuesta
+        }
+    }
+    //Avanzamos en el buffer, leimos lo que tenia
+    buffer_read_adv(&(state->info_read_buff),max);
+    printf("Ya movi el index del buffer para escritura\n");
+    return READING_REQUEST; //vamos a seguir leyendo el request
+}
+unsigned int write_response(struct selector_key* key){
+    printf("Entra a escribir el response!!\n");
+    pop3* state = GET_POP3(key);
+    //ejecutamos la funcion para generar la respuesta, que va a setear a state->finished como corresponda
+    command current_command = commands[state->command];
+    //TODO: hacer que devuelva a donde tenemos que ir para el caso de RETR
+    current_command.action(state); //ejecutamos la accion
+
+    //Escribimos lo que tenemos en el buffer de salida al socket
+    size_t  max = 0;
+    uint8_t* ptr = buffer_read_ptr(&(state->info_write_buff),&max);
+    ssize_t sent_count = send(key->fd,ptr,max,0);
+
+    if(sent_count == -1){
+        printf("Error al escribir en el socket");
+        return FINISHED;
+    }
+    buffer_read_adv(&(state->info_write_buff),sent_count);
+    printf("Avanzamos el puntero de lectura en el buffer de escritura\n");
+    //Si ya no hay mas para escribir y el comando termino de generar la respuesta
+    if(!buffer_can_read(&(state->info_write_buff)) && state->finished){
+        state->finished = false;
+        //Terminamos de mandar la respuesta para el comando, vemos si nos queda otro
+        size_t  max = 0;
+        uint8_t* ptr = buffer_read_ptr(&(state->info_read_buff),&max);
+        for(size_t i = 0; i<max; i++){
+            parser_state parser = parser_feed(state->parser, ptr[i]);
+            if(parser == PARSER_FINISHED || parser == PARSER_ERROR){
+                //avanzamos solo hasta el fin del comando
+                buffer_read_adv(&(state->info_read_buff),i+1);
+                const char* parser_command = get_cmd(state->parser);
+                pop3_command command = get_command(parser_command);
+                state->command = command;
+                if(parser == PARSER_ERROR || command == ERROR_COMMAND || !commands[command].check(get_arg(state->parser))){
+                    printf("No es un comando valido");
+                    state->command = ERROR_COMMAND;
+                }
+                if(!check_command_for_protocol_state(state->pop3_protocol_state, command)){
+                    printf("Comando no permitido\n");
+                    state->command = ERROR_COMMAND;
+                }
+                parser_reset(state->parser);
+                return WRITING_RESPONSE; //vamos a escribir la respuesta
+            }
+        }
+        buffer_read_adv(&(state->info_read_buff),max);
+        //No hay un comando completo, volvemos a leer
+        if(selector_set_interest(key->s,key->fd,OP_READ) != SELECTOR_SUCCESS){
+            printf("Error cambiando el interes del socket para leer\n");
+            return FINISHED;
+        }
+        printf("Cambio al interes de lectura\n");
+        return READING_REQUEST;
+    }
+    //Va a volver a donde esta, tiene que seguir escribiendo
+    return WRITING_RESPONSE;
+}
+unsigned int process_response(struct  selector_key* key){
+
+}
+
+bool check_command_for_protocol_state(protocol_state pop3_protocol_state, pop3_command command){
+    switch (pop3_protocol_state) {
+        case AUTHORIZATION:
+            return command == QUIT || command == USER || command == PASS;
+        case TRANSACTION:
+            return command != USER && command!=PASS;
+        case UPDATE:
+            return false; //no deberia llegar con un comando aca
+        default:
+            return false;
+    }
 }
 
 bool have_argument(const char* arg){
@@ -406,95 +531,6 @@ pop3_command get_command(const char* command){
     }
     return ERROR_COMMAND;
 }
-
-unsigned authorization_read(struct selector_key* key){
-    printf("Entra a authorization a leer\n");
-    pop3* state = GET_POP3(key);
-    //Guardamos lo que leemos en el buffer de entrada
-    size_t max = 0;
-    uint8_t* ptr = buffer_write_ptr(&(state->info_read_buff),&max);
-    ssize_t read_count = recv(key->fd, ptr, max, 0);
-
-    printf("estoy tratando de leer\n");
-
-    if(read_count<=0){
-        printf("Error leyendo del socket\n");
-        return FINISHED;
-    }
-    //Avanzamos la escritura en el buffer
-    buffer_write_adv(&(state->info_read_buff),read_count);
-    //Obtenemos un puntero para lectura
-    ptr = buffer_read_ptr(&(state->info_read_buff),&max);
-    for(size_t i = 0; i<max; i++){
-        printf("El parser lee %c ",ptr[i]);
-        parser_state parser = parser_feed(state->parser, ptr[i]);
-        printf("Llega al estad %d del parser\n",parser);
-        if(parser == PARSER_FINISHED || parser == PARSER_ERROR){
-            printf("El parse llega a un estado final");
-            //avanzamos solo hasta el fin del comando
-            buffer_read_adv(&(state->info_read_buff),i+1);
-            const char* parser_command = get_cmd(state->parser);
-            pop3_command command = get_command(parser_command);
-            printf("\nObtiene el commando %d\n",command);
-            state->command = command;
-            if(command == ERROR_COMMAND || !commands[command].check(get_arg(state->parser))){
-                printf("No es un comando valido");
-                state->command = ERROR_COMMAND;
-            }
-            if(!(command == USER || command == PASS)){
-                printf("Comando no permitido\n");
-                //No se puede en la etapa de authorization
-                state->command = ERROR_COMMAND;
-            }
-            parser_reset(state->parser);
-            //Vamos a procesar la respuesta
-            if(selector_set_interest(key->s,key->fd,OP_WRITE) != SELECTOR_SUCCESS){
-                printf("Error cambiando el interes del socket para escribir\n");
-                return FINISHED;
-            }
-            return AUTHORIZATION;
-        }
-    }
-    //Avanzamos en el buffer, leimos lo que tenia
-    buffer_read_adv(&state->info_read_buff,max);
-    printf("Ya movi el index del buffer para escritura\n");
-    return AUTHORIZATION;
-}
-
-unsigned authorization_write(struct selector_key* key){
-    printf("Entre a escribir en authorization\n");
-    pop3* state = GET_POP3(key);
-    //ejecutamos la funcion para generar la respuesta, que va a setear a state->finished como corresponda
-    command current_command = commands[state->command];
-    current_command.action(state); //ejecutamos la accion
-    printf("Ejecute el comando\n");
-    //Escribimos lo que tenemos en el buffer de salida al socket
-    size_t  max = 0;
-    uint8_t* ptr = buffer_read_ptr(&(state->info_write_buff),&max);
-    ssize_t sent_count = send(key->fd,ptr,max,0);
-
-    printf("Ya deberiamos haber mandado el mensaje\n");
-
-    if(sent_count == -1){
-        printf("Error al escribir en el socket");
-        return FINISHED;
-    }
-    buffer_read_adv(&(state->info_write_buff),sent_count);
-    printf("Avanzamos el puntero de lectura en el buffer de escritura\n");
-    //Si ya no hay mas para escribir y el comando termino de generar la respuesta
-    if(!buffer_can_read(&(state->info_write_buff)) && state->finished){
-        state->finished = false;
-        if(selector_set_interest(key->s,key->fd,OP_READ) != SELECTOR_SUCCESS){
-            printf("Error cambiando el interes del socket para leer\n");
-            return FINISHED;
-        }
-        printf("Cambio al interes de lectura\n");
-    }
-    //TODO: agregar logica para volver cuando termine
-    return AUTHORIZATION;
-}
-
-
 
 int user_action(pop3* state){
     printf("Entro a user_action\n");
@@ -543,8 +579,3 @@ int user_validation(pop3* state){}
 int dele_action(pop3* state){}
 int noop_action(pop3* state){}
 int quit_action(pop3* state){}
-void transaction_arrival(const unsigned state, struct selector_key *key){}
-unsigned transaction_write(struct selector_key* key){}
-unsigned transaction_read(struct selector_key* key){}
-void update_arrival(const unsigned state, struct selector_key *key){}
-unsigned update_write(struct selector_key* key){}

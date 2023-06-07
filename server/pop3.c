@@ -13,9 +13,11 @@
 #include "buffer.h"
 #include "stm.h"
 #include "./parserADT/parserADT.h"
+#include "args.h"
 
 #define WELCOME_MESSAGE "POP3 server\n"
-#define USER_MESSAGE "USER COMMAND\n"
+#define USER_INVALID_MESSAGE "INVALID USER\n"
+#define USER_VALID_MESSAGE "OK send PASS\n"
 #define PASS_MESSAGE "PASS COMMAND\n"
 #define ERROR_COMMAND_MESSAGE "INVALID COMMAND\n"
 #define PASSWD_PATH "/etc/passwd"
@@ -81,6 +83,7 @@ struct pop3{
     buffer info_write_buff;
     bool finished;
     parserADT parser;
+    struct pop3args* pop3_args;
     union{
         struct authorization authorization;
         struct transaction transaction;
@@ -131,7 +134,7 @@ unsigned int read_request(struct selector_key* key);
 unsigned int write_response(struct selector_key* key);
 unsigned int process_response(struct  selector_key* key);
 void pop3_destroy(pop3* state);
-pop3* pop3_create();
+pop3* pop3_create(void * data);
 bool have_argument(const char* arg);
 bool might_argument(const char* arg);
 bool not_argument(const char* arg);
@@ -256,7 +259,7 @@ void pop3_passive_accept(struct selector_key* key) {
         goto fail;
     }
 
-    if((state = pop3_create())==NULL){
+    if((state = pop3_create(key->data))==NULL){
         printf("Fallo el create");
         goto fail;
     }
@@ -282,7 +285,7 @@ fail:
 }
 
 //crea la estructura para manejar el estado del servidor
-pop3* pop3_create(){
+pop3* pop3_create(void * data){
     pop3* ans = calloc(1,sizeof(pop3));
     if(ans == NULL || errno == ENOMEM){ //errno por optimismo Linux
         printf("Error al reservar memoria para el estado");
@@ -295,6 +298,7 @@ pop3* pop3_create(){
     ans->stm.states = state_handlers;
     stm_init(&ans->stm);
     ans->parser = parser_init();
+    ans->pop3_args = (struct pop3args*) data;
 
     // Se inicializan los buffers para el cliente (uno para leer y otro para escribir)
     buffer_init(&(ans->info_read_buff), BUFFER_SIZE ,ans->read_buff);
@@ -406,6 +410,7 @@ unsigned int read_request(struct selector_key* key){
             const char* parser_command = get_cmd(state->parser);
             pop3_command command = get_command(parser_command);
             state->command = command;
+            state->state_data.authorization.user=get_arg(state->parser);
             if(parser == PARSER_ERROR || command == ERROR_COMMAND || !commands[command].check(get_arg(state->parser))){
                 printf("No es un comando valido");
                 state->command = ERROR_COMMAND;
@@ -534,10 +539,20 @@ int user_action(pop3* state){
     printf("Entro a user_action\n");
     size_t max = 0;
     uint8_t * ptr = buffer_write_ptr(&(state->info_write_buff),&max);
-    strncpy((char*)ptr, USER_MESSAGE, max);
-    buffer_write_adv(&(state->info_write_buff),strlen(USER_MESSAGE));
+    for(int i=0; i<state->pop3_args->users->users_count; i++){
+        if(strcmp(state->state_data.authorization.user, state->pop3_args->users->users_array[i].name) == 0){
+            strncpy((char*)ptr, USER_VALID_MESSAGE, max);
+            buffer_write_adv(&(state->info_write_buff),strlen(USER_VALID_MESSAGE));
+            state->finished = true;
+            printf("Salgo de user_action\n");
+            return 0;
+        }
+    }
+    strncpy((char*)ptr, USER_INVALID_MESSAGE, max);
+    buffer_write_adv(&(state->info_write_buff),strlen(USER_INVALID_MESSAGE));
     state->finished = true;
     printf("Salgo de user_action\n");
+    //return 1
     return 0;
 }
 
@@ -545,6 +560,15 @@ int pass_action(pop3* state){
     printf("Entro a pass action\n");
     size_t max = 0;
     uint8_t * ptr = buffer_write_ptr(&(state->info_write_buff),&max);
+    for(int i=0; i<state->pop3_args->users->users_count; i++){
+        if(strcmp(state->state_data.authorization.pass, state->pop3_args->users->users_array[i].pass) == 0){
+            strncpy((char*)ptr, USER_VALID_MESSAGE, max);
+            buffer_write_adv(&(state->info_write_buff),strlen(USER_VALID_MESSAGE));
+            state->finished = true;
+            printf("Salgo de user_action\n");
+            return 0;
+        }
+    }
     strncpy((char*)ptr, PASS_MESSAGE,max);
     buffer_write_adv(&(state->info_write_buff),strlen(PASS_MESSAGE));
     state->finished = true;

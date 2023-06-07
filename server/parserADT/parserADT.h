@@ -48,6 +48,6 @@ const char * get_cmd(parserADT p);
  *
  * Retorna NULL si no pudo crear la copia
  */
-const char * get_arg(parserADT p);
+char * get_arg(parserADT p);
 
 #endif

@@ -58,7 +58,7 @@ const char * get_cmd(parserADT p) {
     return cmd;
 }
 
-const char * get_arg(parserADT p) {
+char * get_arg(parserADT p) {
     char * arg = calloc(p->arg_length+1, sizeof(char));
     //como usamos calloc para arg_length+1, ya va a tener el \0
     if(arg != NULL) {

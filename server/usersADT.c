@@ -1,7 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "usersADT.h"
-
+#include <stdio.h>
 
 static int usersADT_find_user(usersADT u, const char * user_name);
 
@@ -30,7 +30,7 @@ void usersADT_destroy(usersADT u) {
 }
 
 int usersADT_add(usersADT u, const char * user_name, const char * user_pass) {
-    if(usersADT_find_user(u,user_name) == -1){
+    if(usersADT_find_user(u,user_name) != -1){
         return -1;
     }
     char * name = NULL;

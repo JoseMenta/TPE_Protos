@@ -18,7 +18,8 @@
 #define WELCOME_MESSAGE "POP3 server\n"
 #define USER_INVALID_MESSAGE "INVALID USER\n"
 #define USER_VALID_MESSAGE "OK send PASS\n"
-#define PASS_MESSAGE "PASS COMMAND\n"
+#define PASS_VALID_MESSAGE "OK send IDK\n"
+#define PASS_INVALID_MESSAGE "INVALID PASS\n"
 #define ERROR_COMMAND_MESSAGE "INVALID COMMAND\n"
 #define PASSWD_PATH "/etc/passwd"
 #define MAILDIR = "/home/jmentasti/maildir"
@@ -75,6 +76,7 @@ typedef enum{
 
 struct pop3{
     pop3_command command;
+    char * arg;
     struct state_machine stm;
     protocol_state pop3_protocol_state;
     uint8_t read_buff[BUFFER_SIZE];
@@ -410,7 +412,7 @@ unsigned int read_request(struct selector_key* key){
             const char* parser_command = get_cmd(state->parser);
             pop3_command command = get_command(parser_command);
             state->command = command;
-            state->state_data.authorization.user=get_arg(state->parser);
+            state->arg = get_arg(state->parser);
             if(parser == PARSER_ERROR || command == ERROR_COMMAND || !commands[command].check(get_arg(state->parser))){
                 printf("No es un comando valido");
                 state->command = ERROR_COMMAND;
@@ -539,8 +541,10 @@ int user_action(pop3* state){
     printf("Entro a user_action\n");
     size_t max = 0;
     uint8_t * ptr = buffer_write_ptr(&(state->info_write_buff),&max);
-    for(int i=0; i<state->pop3_args->users->users_count; i++){
-        if(strcmp(state->state_data.authorization.user, state->pop3_args->users->users_array[i].name) == 0){
+    for(int i=0; i<=state->pop3_args->users->users_count; i++){
+        if(strcmp(state->arg, state->pop3_args->users->users_array[i].name) == 0){
+            state->state_data.authorization.user = state->pop3_args->users->users_array[i].name;
+            state->state_data.authorization.pass = state->pop3_args->users->users_array[i].pass;
             strncpy((char*)ptr, USER_VALID_MESSAGE, max);
             buffer_write_adv(&(state->info_write_buff),strlen(USER_VALID_MESSAGE));
             state->finished = true;
@@ -560,17 +564,15 @@ int pass_action(pop3* state){
     printf("Entro a pass action\n");
     size_t max = 0;
     uint8_t * ptr = buffer_write_ptr(&(state->info_write_buff),&max);
-    for(int i=0; i<state->pop3_args->users->users_count; i++){
-        if(strcmp(state->state_data.authorization.pass, state->pop3_args->users->users_array[i].pass) == 0){
-            strncpy((char*)ptr, USER_VALID_MESSAGE, max);
-            buffer_write_adv(&(state->info_write_buff),strlen(USER_VALID_MESSAGE));
-            state->finished = true;
-            printf("Salgo de user_action\n");
-            return 0;
-        }
+    if(state->state_data.authorization.pass != NULL && strcmp(state->arg, state->state_data.authorization.pass) == 0){
+        strncpy((char*)ptr, PASS_VALID_MESSAGE,max);
+        buffer_write_adv(&(state->info_write_buff),strlen(PASS_VALID_MESSAGE));
+        state->finished = true;
+        printf("Salgo de pass_action\n");
+        return  0;
     }
-    strncpy((char*)ptr, PASS_MESSAGE,max);
-    buffer_write_adv(&(state->info_write_buff),strlen(PASS_MESSAGE));
+    strncpy((char*)ptr, PASS_INVALID_MESSAGE,max);
+    buffer_write_adv(&(state->info_write_buff),strlen(PASS_INVALID_MESSAGE));
     state->finished = true;
     printf("Salgo de pass_action\n");
     return  0;
@@ -580,8 +582,8 @@ int stat_action(pop3* state){
     printf("Entro a stat action\n");
     size_t max = 0;
     uint8_t * ptr = buffer_write_ptr(&(state->info_write_buff),&max);
-    strncpy((char*)ptr, PASS_MESSAGE, max);
-    buffer_write_adv(&(state->info_write_buff),strlen(PASS_MESSAGE));
+    strncpy((char*)ptr, WELCOME_MESSAGE, max);
+    buffer_write_adv(&(state->info_write_buff),strlen(WELCOME_MESSAGE));
     state->finished = true;
     return  0;
 }

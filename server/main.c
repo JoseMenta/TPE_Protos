@@ -35,6 +35,7 @@ int main(int argc, const char* argv[]) {
     setvbuf(stdout, NULL, _IONBF, 0);
     // Por defecto, el servidor escucha en el puerto 1100
     unsigned port = pop3_args->pop3_port;
+    printf("\n\n\nusuarios: %d\n\n\n", pop3_args->users->users_count);
 
     //No tenemos nada que leer de entrada estandar
     close(STDIN_FILENO);

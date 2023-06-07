@@ -6,7 +6,7 @@
 #define CHUNK 10
 
 typedef struct{
-    const char *name;
+    char *name;
     char *pass;
 } user_t;
 

@@ -12,7 +12,7 @@
 #include <netinet/tcp.h>
 #include "selector.h"
 #include "pop3.h"
-
+#include "args.h"
 
 #define MAX_PENDING_CONNECTIONS 20
 #define INITIAL_FDS 1024
@@ -26,7 +26,11 @@ sigterm_handler(const int signal) {
 }
 
 
-int main(int argc, const char* argv[]){
+int main(int argc, const char* argv[]) {
+
+    struct pop3args pop3_args = malloc(sizeof(struct pop3args));
+    parse_args(argc, argv, pop3_args);
+
     // No queremos que se haga buffering de la salida estandar (que se envíe al recibir un \n), sino que se envíe inmediatamente
     setvbuf(stdout, NULL, _IONBF, 0);
     // Por defecto, el servidor escucha en el puerto 1100
@@ -135,7 +139,7 @@ int main(int argc, const char* argv[]){
     //Registra al fd del server, suscribiendolo para la lectura
     //Como no necesita un dato auxiliar para los handlers, pasa NULL
     ss = selector_register(selector, server, &socksv5,
-                                              OP_READ, NULL);
+                                              OP_READ, pop3_args);
     if(ss != SELECTOR_SUCCESS) {
         err_msg = "registering fd";
         goto finally;

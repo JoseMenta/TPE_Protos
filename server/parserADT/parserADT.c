@@ -75,7 +75,6 @@ parser_state parser_feed(parserADT p, uint8_t c) {
     const size_t n                              = p->def->states_n[p->state];
     // Flag para indicar si se encontró una transición que con la condición
     bool matched = false;
-    int aux=0;
     for (size_t i = 0; i < n && !matched; i++) {
         switch (state[i].when) {
             case LETTER:

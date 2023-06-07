@@ -492,7 +492,9 @@ unsigned int write_response(struct selector_key* key){
     //Va a volver a donde esta, tiene que seguir escribiendo
     return WRITING_RESPONSE;
 }
-unsigned int process_response(struct  selector_key* key){}
+unsigned int process_response(struct  selector_key* key){
+    return 0;
+}
 
 bool check_command_for_protocol_state(protocol_state pop3_protocol_state, pop3_command command){
     switch (pop3_protocol_state) {
@@ -541,7 +543,7 @@ int user_action(pop3* state){
     printf("Entro a user_action\n");
     size_t max = 0;
     uint8_t * ptr = buffer_write_ptr(&(state->info_write_buff),&max);
-    for(int i=0; i<=state->pop3_args->users->users_count; i++){
+    for(unsigned int i=0; i<=state->pop3_args->users->users_count; i++){
         if(strcmp(state->arg, state->pop3_args->users->users_array[i].name) == 0){
             state->state_data.authorization.user = state->pop3_args->users->users_array[i].name;
             state->state_data.authorization.pass = state->pop3_args->users->users_array[i].pass;
@@ -597,9 +599,21 @@ int default_action(pop3* state){
     return 0;
 }
 
-int list_action(pop3* state){}
-int retr_action(pop3* state){}
-int user_validation(pop3* state){}
-int dele_action(pop3* state){}
-int noop_action(pop3* state){}
-int quit_action(pop3* state){}
+int list_action(pop3* state){
+    return 0;
+}
+int retr_action(pop3* state){
+    return 0;
+}
+int user_validation(pop3* state){
+    return 0;
+}
+int dele_action(pop3* state){
+    return 0;
+}
+int noop_action(pop3* state){
+    return 0;
+}
+int quit_action(pop3* state){
+    return 0;
+}

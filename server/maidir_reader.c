@@ -10,7 +10,6 @@
 #define CHUNK_SIZE 10
 
 email* read_maildir(const char* maildir_path, size_t* size){
-    char buff[PATH_MAX] = {0};
     size_t i = 0;
     size_t ans_size = 0;
     email* ans = NULL;
@@ -18,8 +17,6 @@ email* read_maildir(const char* maildir_path, size_t* size){
     if(maildir_path == NULL){
         goto fail;
     }
-    size_t path_size = strlen(maildir_path);
-    strncpy(buff,maildir_path,PATH_MAX); //copiamos el path
     struct dirent* dirent = NULL;
     while(dirent = readdir(mail_dir),dirent != NULL && i<*size){
         if(strcmp(dirent->d_name,".")!=0 && strcmp(dirent->d_name,"..")!=0){

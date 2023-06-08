@@ -543,22 +543,18 @@ int user_action(pop3* state){
     printf("Entro a user_action\n");
     size_t max = 0;
     uint8_t * ptr = buffer_write_ptr(&(state->info_write_buff),&max);
-    for(unsigned int i=0; i<=state->pop3_args->users->users_count; i++){
+    char * msj = USER_INVALID_MESSAGE;
+    for(unsigned int i=0; i<state->pop3_args->users->users_count; i++){
         if(strcmp(state->arg, state->pop3_args->users->users_array[i].name) == 0){
             state->state_data.authorization.user = state->pop3_args->users->users_array[i].name;
             state->state_data.authorization.pass = state->pop3_args->users->users_array[i].pass;
-            strncpy((char*)ptr, USER_VALID_MESSAGE, max);
-            buffer_write_adv(&(state->info_write_buff),strlen(USER_VALID_MESSAGE));
-            state->finished = true;
-            printf("Salgo de user_action\n");
-            return 0;
+            msj = USER_VALID_MESSAGE;
         }
     }
-    strncpy((char*)ptr, USER_INVALID_MESSAGE, max);
-    buffer_write_adv(&(state->info_write_buff),strlen(USER_INVALID_MESSAGE));
+    strncpy((char*)ptr, msj, max);
+    buffer_write_adv(&(state->info_write_buff),strlen(msj));
     state->finished = true;
     printf("Salgo de user_action\n");
-    //return 1
     return 0;
 }
 
@@ -566,15 +562,13 @@ int pass_action(pop3* state){
     printf("Entro a pass action\n");
     size_t max = 0;
     uint8_t * ptr = buffer_write_ptr(&(state->info_write_buff),&max);
+    char * msj = PASS_INVALID_MESSAGE;
     if(state->state_data.authorization.pass != NULL && strcmp(state->arg, state->state_data.authorization.pass) == 0){
-        strncpy((char*)ptr, PASS_VALID_MESSAGE,max);
-        buffer_write_adv(&(state->info_write_buff),strlen(PASS_VALID_MESSAGE));
-        state->finished = true;
-        printf("Salgo de pass_action\n");
-        return  0;
+        msj = PASS_VALID_MESSAGE;
+        state->pop3_protocol_state = TRANSACTION;
     }
-    strncpy((char*)ptr, PASS_INVALID_MESSAGE,max);
-    buffer_write_adv(&(state->info_write_buff),strlen(PASS_INVALID_MESSAGE));
+    strncpy((char*)ptr, msj,max);
+    buffer_write_adv(&(state->info_write_buff),strlen(msj));
     state->finished = true;
     printf("Salgo de pass_action\n");
     return  0;

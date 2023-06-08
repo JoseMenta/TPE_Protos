@@ -27,7 +27,7 @@ port(const char *s) {
 
 static char * path(const char * path){
     unsigned int path_len = strlen(path);
-    char * ret_str = malloc(path_len+1);
+    char * ret_str = calloc(path_len+1,sizeof (char));
     strncpy(ret_str, path, path_len);
     return ret_str;
 }
@@ -111,8 +111,9 @@ parse_args(const int argc, const char **argv, struct pop3args *args) {
                 exit(0);
             case 'd':
                 args->maildir_path = path(optarg);
+                break;
             default:
-                fprintf(stderr, "unknown argument %d.\n", c);
+                fprintf(stderr, "unknown argument %c.\n", c);
                 exit(1);
         }
     }

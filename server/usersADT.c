@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "usersADT.h"
+#include <errno.h>
 
 static int usersADT_find_user(usersADT u, const char * user_name);
 
@@ -12,7 +13,7 @@ usersADT usersADT_init(){
     u->array_length = CHUNK;
     u->users_count = 0;
     u->users_array = calloc(CHUNK, sizeof(user_t));
-    if(u->users_array == NULL){
+    if(u->users_array == NULL || errno == ENOMEM){
         free(u);
         return NULL;
     }
@@ -36,13 +37,13 @@ int usersADT_add(usersADT u, const char * user_name, const char * user_pass) {
     char * pass = NULL;
     unsigned int name_length = strlen(user_name);
     name = calloc(name_length + 1, sizeof(char));
-    if(name == NULL) {
+    if(name == NULL || errno == ENOMEM) {
         goto error;
     }
     strncpy(name, user_name, name_length);
     unsigned int pass_length = strlen(user_pass);
     pass = calloc(pass_length + 1, sizeof(char));
-    if(pass == NULL) {
+    if(pass == NULL  || errno == ENOMEM) {
         goto error;
     }
     strncpy(pass, user_pass, pass_length);
@@ -70,19 +71,21 @@ int usersADT_add(usersADT u, const char * user_name, const char * user_pass) {
 }
 
 char * usersADT_get_user_mail_path(usersADT u, const char * base_path, const char * user_name) {
-    unsigned int user_index = usersADT_find_user(u, user_name);
-    if(user_index) {
+    int user_index = usersADT_find_user(u, user_name);
+    if(user_index == -1) {
         return NULL;
     }
     unsigned int base_path_len = strlen(base_path);
     unsigned int user_name_len = strlen(user_name);
-    char * user_mail_path = calloc(base_path_len + user_name_len + 2, sizeof(char));
-    if(user_mail_path == NULL) {
+    unsigned int curl_len = strlen(CURL_PATH);
+    char * user_mail_path = calloc(base_path_len + user_name_len + curl_len + 2, sizeof(char));
+    if(user_mail_path == NULL || errno == ENOMEM) {
         return NULL;
     }
     strncpy(user_mail_path, base_path, base_path_len);
     user_mail_path[base_path_len] = '/';
     strncat(user_mail_path, user_name, user_name_len);
+    strncat(user_mail_path, CURL_PATH, curl_len);
     return user_mail_path;
 }
 

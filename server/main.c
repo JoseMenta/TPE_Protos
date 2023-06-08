@@ -33,7 +33,8 @@ int main(int argc, const char* argv[]) {
 
     // No queremos que se haga buffering de la salida estandar (que se envíe al recibir un \n), sino que se envíe inmediatamente
     setvbuf(stdout, NULL, _IONBF, 0);
-    // Por defecto, el servidor escucha en el puerto 1100
+    // Por defecto, el servidor escucha en el puerto que se pasa pero por defecto es el 1100
+    //TODO: Cambiar a 110 para la entrega
     unsigned port = pop3_args->pop3_port;
 
     //No tenemos nada que leer de entrada estandar

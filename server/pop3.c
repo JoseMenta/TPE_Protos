@@ -141,8 +141,6 @@ int stat_action(pop3* state);
 int list_action(pop3* state);
 int retr_action(pop3* state);
 int dele_action(pop3* state);
-int user_validation(pop3* state);
-int dele_action(pop3* state);
 int noop_action(pop3* state);
 int quit_action(pop3* state);
 int default_action(pop3* state);
@@ -403,8 +401,13 @@ unsigned int read_request(struct selector_key* key){
             //avanzamos solo hasta el fin del comando
             buffer_read_adv(&(state->info_read_buff),i+1);
             const char* parser_command = get_cmd(state->parser);
+            //TODO: chequear bien error
+            if(parser_command == NULL){
+                return FINISHED;
+            }
             pop3_command command = get_command(parser_command);
             state->command = command;
+            free((void*)parser_command);
             state->arg = get_arg(state->parser);
             if(parser == PARSER_ERROR || command == ERROR_COMMAND || !commands[command].check(get_arg(state->parser))){
                 printf("No es un comando valido");
@@ -450,6 +453,8 @@ unsigned int write_response(struct selector_key* key){
     //Si ya no hay mas para escribir y el comando termino de generar la respuesta
     if(!buffer_can_read(&(state->info_write_buff)) && state->finished){
         state->finished = false;
+        //TODO: chequear
+        free(state->arg);
         //Terminamos de mandar la respuesta para el comando, vemos si nos queda otro
         size_t  max = 0;
         uint8_t* ptr = buffer_read_ptr(&(state->info_read_buff),&max);
@@ -459,8 +464,14 @@ unsigned int write_response(struct selector_key* key){
                 //avanzamos solo hasta el fin del comando
                 buffer_read_adv(&(state->info_read_buff),i+1);
                 const char* parser_command = get_cmd(state->parser);
+                //TODO: chequear bien error
+                if(parser_command == NULL){
+                    return FINISHED;
+                }
                 pop3_command command = get_command(parser_command);
+                free((void*)parser_command);
                 state->command = command;
+                state->arg = get_arg(state->parser);
                 if(parser == PARSER_ERROR || command == ERROR_COMMAND || !commands[command].check(get_arg(state->parser))){
                     printf("No es un comando valido");
                     state->command = ERROR_COMMAND;
@@ -590,9 +601,6 @@ int list_action(pop3* state){
     return 0;
 }
 int retr_action(pop3* state){
-    return 0;
-}
-int user_validation(pop3* state){
     return 0;
 }
 int dele_action(pop3* state){

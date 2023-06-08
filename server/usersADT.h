@@ -4,6 +4,7 @@
 #include <stdbool.h>
 
 #define CHUNK 10
+#define CURL_PATH "/cur"
 
 typedef struct{
     char *name;

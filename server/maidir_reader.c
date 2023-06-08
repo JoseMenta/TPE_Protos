@@ -13,8 +13,12 @@ email* read_maildir(const char* maildir_path, size_t* size){
     size_t i = 0;
     size_t ans_size = 0;
     email* ans = NULL;
-    DIR * mail_dir = opendir(maildir_path);
+    DIR* mail_dir = NULL;
     if(maildir_path == NULL){
+        goto fail;
+    }
+    mail_dir = opendir(maildir_path);
+    if(mail_dir == NULL){
         goto fail;
     }
     struct dirent* dirent = NULL;

@@ -78,6 +78,8 @@ struct pop3{
     buffer info_write_buff;
     bool finished;
     parserADT parser;
+    email* emails;
+    size_t emails_count;
     struct pop3args* pop3_args;
     union{
         struct authorization authorization;
@@ -506,8 +508,6 @@ bool check_command_for_protocol_state(protocol_state pop3_protocol_state, pop3_c
             return command == QUIT || command == USER || command == PASS;
         case TRANSACTION:
             return command != USER && command!=PASS;
-        case UPDATE:
-            return false; //no deberia llegar con un comando aca
         default:
             return false;
     }
@@ -570,6 +570,17 @@ int pass_action(pop3* state){
     if(state->state_data.authorization.pass != NULL && strcmp(state->arg, state->state_data.authorization.pass) == 0){
         msj = PASS_VALID_MESSAGE;
         state->pop3_protocol_state = TRANSACTION;
+        //Inicializamos la estructura con los mails
+        char* mails_path = usersADT_get_user_mail_path(state->pop3_args->users,state->pop3_args->maildir_path, state->state_data.authorization.user);
+        //TODO: Setear el max para el mails con cliente
+        size_t mails_max = 20;
+        state->emails = read_maildir(mails_path,&mails_max);
+        if(state->emails == NULL){
+            printf("No hay cosas en el directorio de mails!\n");
+            return FINISHED;
+        }
+        state->emails_count = mails_max;
+        free(mails_path);
     }
     strncpy((char*)ptr, msj,max);
     buffer_write_adv(&(state->info_write_buff),strlen(msj));

@@ -83,7 +83,7 @@ char * usersADT_get_user_mail_path(usersADT u, const char * base_path, const cha
         return NULL;
     }
     strncpy(user_mail_path, base_path, base_path_len);
-    user_mail_path[base_path_len] = '/';
+//    user_mail_path[base_path_len] = '/';
     strncat(user_mail_path, user_name, user_name_len);
     strncat(user_mail_path, CURL_PATH, curl_len);
     return user_mail_path;

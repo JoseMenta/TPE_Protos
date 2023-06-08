@@ -1,7 +1,5 @@
-#include <sys/types.h>   // socket, opendir
+#include <sys/types.h>   // socket
 #include <sys/socket.h>  // socket
-#include <sys/stat.h> //stat
-#include <dirent.h> //readdir
 #include <netinet/in.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -12,6 +10,7 @@
 #include "pop3.h"
 #include "buffer.h"
 #include "stm.h"
+#include "maidir_reader.h"
 #include "./parserADT/parserADT.h"
 #include "args.h"
 
@@ -50,12 +49,6 @@ struct update{
     int i;
 };
 
-typedef struct email email;
-struct email{
-    char* name; //to open the file later
-    off_t size; //es un int
-    bool deleted;
-};
 typedef enum{
     USER = 0,
     PASS,

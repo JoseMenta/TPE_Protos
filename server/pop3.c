@@ -19,6 +19,8 @@
 #define USER_VALID_MESSAGE "OK send PASS\n"
 #define PASS_VALID_MESSAGE "OK send IDK\n"
 #define PASS_INVALID_MESSAGE "INVALID PASS\n"
+#define OK_MESSSAGE "+OK\n"
+#define ERROR_MESSSAGE "-ERR\n"
 #define ERROR_COMMAND_MESSAGE "INVALID COMMAND\n"
 #define PASSWD_PATH "/etc/passwd"
 #define MAILDIR = "/home/jmentasti/maildir"
@@ -57,6 +59,7 @@ typedef enum{
     RETR,
     DELE,
     NOOP,
+    RSET,
     QUIT,
     ERROR_COMMAND //para escribir el mensaje de error
 } pop3_command;
@@ -146,7 +149,7 @@ int dele_action(pop3* state);
 int noop_action(pop3* state);
 int quit_action(pop3* state);
 int default_action(pop3* state);
-
+int rset_action(pop3* state);
 
 static struct command commands[]={
         {
@@ -183,6 +186,10 @@ static struct command commands[]={
             .name = "NOOP",
             .check = not_argument,
             .action = noop_action
+        },{
+            .name = "RSET",
+            .check = not_argument,
+            .action = rset_action
         },
         {
             .name = "QUIT",
@@ -590,36 +597,109 @@ int pass_action(pop3* state){
 }
 
 int stat_action(pop3* state){
-    printf("Entro a stat action\n");
     size_t max = 0;
     uint8_t * ptr = buffer_write_ptr(&(state->info_write_buff),&max);
-    strncpy((char*)ptr, WELCOME_MESSAGE, max);
-    buffer_write_adv(&(state->info_write_buff),strlen(WELCOME_MESSAGE));
+    int max_len = 3+1+20+1+20+1;
+    if(max<max_len){
+        return 0;
+    }
+    //Puedo escribir la respuesta
+    char aux[max_len];
+    //computamos el total de size
+    long aux_len_emails = 0;
+    for(int i=0; i<state->emails_count ; i++){
+        if(!state->emails[i].deleted){
+            aux_len_emails += state->emails[i].size;
+        }
+    }
+    snprintf(aux,max_len,"+OK %zu %ld\n",state->emails_count,aux_len_emails);
+    unsigned long aux_len = strlen(aux);
+    strncpy((char*)ptr, aux,aux_len );
+    buffer_write_adv(&(state->info_write_buff),aux_len);
     state->finished = true;
     return  0;
 }
 int default_action(pop3* state){
     printf("Entro a default action\n");
+    return 0;
+}
+
+
+
+int list_action(pop3* state){
+    //TODO
+    return 0;
+}
+
+
+int retr_action(pop3* state){
+    //TODO
+    return 0;
+}
+
+
+int dele_action(pop3* state){
     size_t max = 0;
     uint8_t * ptr = buffer_write_ptr(&(state->info_write_buff),&max);
-    strncpy((char*)ptr, ERROR_COMMAND_MESSAGE, max);
-    buffer_write_adv(&(state->info_write_buff),strlen(ERROR_COMMAND_MESSAGE));
+    //Vemos que pueda mandar el OK o el ERR usando el mas grande de los 2
+    char * msj_ret = ERROR_MESSSAGE;
+    int max_len = strlen(msj_ret);
+    if(max<max_len){
+        //Tengo que esperar para mandar la respuesta
+        return 0;
+    }
+    //state
+    long index = strtol(state->arg, NULL,10)-1;
+    //REvisamos si se puede eliminar
+    if( index < state->emails_count &&  index>=0 &&  !state->emails[index].deleted){
+        state->emails[index].deleted = true;
+        msj_ret = OK_MESSSAGE;
+    }
+    strncpy((char*)ptr, msj_ret,max_len);
+    buffer_write_adv(&(state->info_write_buff), strlen(msj_ret));
+    state->finished = true;
+    return  0;
+}
+
+
+
+int rset_action(pop3* state){
+    size_t max = 0;
+    uint8_t * ptr = buffer_write_ptr(&(state->info_write_buff),&max);
+    int message_len = strlen(OK_MESSSAGE);
+    if(max<message_len){
+        //Tengo que esperar para mandar la respuesta
+        return 0;
+    }
+    //computamos el total de size
+    for(int i=0; i<state->emails_count ; i++){
+        state->emails[i].deleted = false;
+    }
+    strncpy((char*)ptr, OK_MESSSAGE,message_len);
+    buffer_write_adv(&(state->info_write_buff),message_len);
+    state->finished = true;
+    return  0;
+}
+
+
+
+int noop_action(pop3* state){
+    size_t max = 0;
+    uint8_t * ptr = buffer_write_ptr(&(state->info_write_buff),&max);
+    int msj_len = strlen(OK_MESSSAGE);
+    if(max < msj_len){
+        return 0;
+    }
+    strncpy((char*)ptr, OK_MESSSAGE, max);
+    buffer_write_adv(&(state->info_write_buff),strlen(OK_MESSSAGE));
     state->finished = true;
     return 0;
 }
 
-int list_action(pop3* state){
-    return 0;
-}
-int retr_action(pop3* state){
-    return 0;
-}
-int dele_action(pop3* state){
-    return 0;
-}
-int noop_action(pop3* state){
-    return 0;
-}
+
+
 int quit_action(pop3* state){
+    //Si esta en Transaction, hace el update y termina (cierra la conexion)
+    //Si no, solo cierra la conexion
     return 0;
 }

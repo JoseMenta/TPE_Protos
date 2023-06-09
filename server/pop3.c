@@ -133,6 +133,7 @@ unsigned int hello_write(struct selector_key* key);
 unsigned int read_request(struct selector_key* key);
 unsigned int write_response(struct selector_key* key);
 unsigned int process_response(struct  selector_key* key);
+void finish_connection(const unsigned state, struct selector_key *key);
 void pop3_destroy(pop3* state);
 pop3* pop3_create(void * data);
 bool have_argument(const char* arg);
@@ -222,6 +223,7 @@ static const struct state_definition state_handlers[] ={
     },
     {
         .state = FINISHED,
+        .on_arrival = finish_connection,
     },
     {
         .state = ERROR,
@@ -323,9 +325,9 @@ void pop3_read(struct selector_key* key){
     const pop3_state st = stm_handler_read(stm,key);
     printf("Termina con el estado %d\n",st);
 
-    if(FINISHED == st){
-        pop3_done(key);
-    }
+//    if(FINISHED == st){
+//        pop3_done(key);
+//    }
 }
 
 
@@ -337,9 +339,9 @@ void pop3_write(struct selector_key* key){
     const pop3_state st = stm_handler_write(stm,key);
     printf("Termina con el estado %d\n",st);
 
-    if(FINISHED == st){
-        pop3_done(key);
-    }
+//    if(FINISHED == st){
+//        pop3_done(key);
+//    }
 }
 
 
@@ -507,6 +509,15 @@ unsigned int write_response(struct selector_key* key){
 }
 unsigned int process_response(struct  selector_key* key){
     return 0;
+}
+
+void finish_connection(const unsigned state, struct selector_key *key){
+    //TODO: cerrar tanto al archivo como el socket ahora que tenemos los 2 casos
+    if (selector_unregister_fd(key->s, key->fd) != SELECTOR_SUCCESS) {
+        abort();
+    }
+    pop3_destroy(GET_POP3(key));
+    close(key->fd);
 }
 
 bool check_command_for_protocol_state(protocol_state pop3_protocol_state, pop3_command command){

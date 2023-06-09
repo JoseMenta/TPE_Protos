@@ -621,12 +621,23 @@ int stat_action(pop3* state){
 }
 int default_action(pop3* state){
     printf("Entro a default action\n");
-    return 0;
+    size_t max = 0;
+    uint8_t * ptr = buffer_write_ptr(&(state->info_write_buff),&max);
+    int message_len = strlen(ERROR_COMMAND_MESSAGE);
+    if(max<message_len){
+        //vuelvo a intentar despues
+        return 0;
+    }
+    //Manda el mensaje parcialmente si no hay espacio
+    strncpy((char*)ptr, ERROR_COMMAND_MESSAGE, message_len);
+    buffer_write_adv(&(state->info_write_buff),message_len);
+    state->finished = true;
 }
 
 
 
 int list_action(pop3* state){
+
     //TODO
     return 0;
 }
@@ -649,7 +660,7 @@ int dele_action(pop3* state){
         return 0;
     }
     //state
-    long index = strtol(state->arg, NULL,10)-1;
+    long index = strtol(state->arg, NULL,10);
     //REvisamos si se puede eliminar
     if( index < state->emails_count &&  index>=0 &&  !state->emails[index].deleted){
         state->emails[index].deleted = true;
@@ -691,7 +702,7 @@ int noop_action(pop3* state){
         return 0;
     }
     strncpy((char*)ptr, OK_MESSSAGE, max);
-    buffer_write_adv(&(state->info_write_buff),strlen(OK_MESSSAGE));
+    buffer_write_adv(&(state->info_write_buff),msj_len);
     state->finished = true;
     return 0;
 }
@@ -699,6 +710,7 @@ int noop_action(pop3* state){
 
 
 int quit_action(pop3* state){
+    //TODO: hacer que lo que devuelva cambie el comportamiento de write_response
     //Si esta en Transaction, hace el update y termina (cierra la conexion)
     //Si no, solo cierra la conexion
     return 0;

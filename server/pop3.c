@@ -23,7 +23,10 @@
 #define ERROR_MESSSAGE "-ERR\n"
 #define ERROR_COMMAND_MESSAGE "INVALID COMMAND\n"
 #define PASSWD_PATH "/etc/passwd"
-#define MAILDIR = "/home/jmentasti/maildir"
+#define MAILDIR "/home/jmentasti/maildir"
+#define ERROR_DELETED_MESSAGE "-ERR THIS MESSAGE IS DELETED\n"
+//TODO VER DE PODER PONER EL INDICE MAYOR
+#define ERROR_INDEX_MESSAGE "-ERR no such message\n"
 //Esto es lo que vamos a pasar en void* data del selector
 //Vamos a agregar lo que necesitemos, como un array con todos los mails que tiene el usuario
 
@@ -43,8 +46,18 @@ struct authorization{
     char * path_to_user_data;
 };
 
+typedef enum{
+    MULTILINE_STATE_FIRST_LINE,
+    MULTILINE_STATE_MULTILINE,
+    MULTILINE_STATE_END_LINE,
+}multiline_state;
+
 struct transaction{
-    int i;
+    int mail_index;
+    bool has_arg;
+    bool arg_processed;
+    long arg;
+    multiline_state multiline_state;
 };
 
 struct update{
@@ -134,6 +147,7 @@ unsigned int read_request(struct selector_key* key);
 unsigned int write_response(struct selector_key* key);
 unsigned int process_response(struct  selector_key* key);
 void finish_connection(const unsigned state, struct selector_key *key);
+void reset_structures(pop3* state);
 void pop3_destroy(pop3* state);
 pop3* pop3_create(void * data);
 bool have_argument(const char* arg);
@@ -448,8 +462,9 @@ unsigned int write_response(struct selector_key* key){
     //ejecutamos la funcion para generar la respuesta, que va a setear a state->finished como corresponda
     command current_command = commands[state->command];
     //TODO: hacer que devuelva a donde tenemos que ir para el caso de RETR
-    current_command.action(state); //ejecutamos la accion
-
+    if(!state->finished) {
+        current_command.action(state); //ejecutamos la accion
+    }
     //Escribimos lo que tenemos en el buffer de salida al socket
     size_t  max = 0;
     uint8_t* ptr = buffer_read_ptr(&(state->info_write_buff),&max);
@@ -519,7 +534,16 @@ void finish_connection(const unsigned state, struct selector_key *key){
     pop3_destroy(GET_POP3(key));
     close(key->fd);
 }
-
+void reset_structures(pop3* data){
+    //Reinicia todos los campos en los structs de los unions
+    data->state_data.authorization.pass = NULL;
+    data->state_data.authorization.pass = NULL;
+    data->state_data.transaction.arg = 0;
+    data->state_data.transaction.arg_processed = false;
+    data->state_data.transaction.has_arg = false;
+    data->state_data.transaction.mail_index = 0;
+    data->state_data.transaction.multiline_state = MULTILINE_STATE_FIRST_LINE;
+}
 bool check_command_for_protocol_state(protocol_state pop3_protocol_state, pop3_command command){
     switch (pop3_protocol_state) {
         case AUTHORIZATION:
@@ -598,6 +622,7 @@ int pass_action(pop3* state){
             return FINISHED;
         }
         state->emails_count = mails_max;
+        reset_structures(state);
         free(mails_path);
     }
     strncpy((char*)ptr, msj,max);
@@ -648,8 +673,126 @@ int default_action(pop3* state){
 
 
 int list_action(pop3* state){
+    //procesamos el argumento recibido
+    if(!state->state_data.transaction.arg_processed && strlen(state->arg) != 0){
+        state->state_data.transaction.has_arg = true;
+        state->state_data.transaction.arg = strtol(state->arg, NULL,10);
+    }else{
+        state->state_data.transaction.has_arg = false;
+    }
+    state->state_data.transaction.arg_processed = true;
 
-    //TODO
+    size_t max = 0;
+    uint8_t * ptr = buffer_write_ptr(&(state->info_write_buff),&max);
+
+    if(state->state_data.transaction.has_arg){
+        printf("ENTRO A UN UNICO ARGUMENTO\n");
+        if(state->state_data.transaction.arg > state->emails_count || state->state_data.transaction.arg <= 0){
+            //Error de indice
+            printf("ENTRO A ERRO DE INCDICE\n");
+            int message_len = strlen(ERROR_INDEX_MESSAGE);
+            if(max<message_len){
+                //vuelvo a intentar despues
+                return 0;
+            }
+            //Manda el mensaje parcialmente si no hay espacio
+            strncpy((char*)ptr, ERROR_INDEX_MESSAGE, message_len);
+            buffer_write_adv(&(state->info_write_buff),message_len);
+            state->finished = true;
+            reset_structures(state);
+            return  0;
+
+        }
+        if(state->emails[state->state_data.transaction.arg-1].deleted){
+            //ERROR DE MAIL ELIMINADO
+            int message_len = strlen(ERROR_DELETED_MESSAGE);
+            if(max<message_len){
+                //vuelvo a intentar despues
+                return 0;
+            }
+            //Manda el mensaje parcialmente si no hay espacio
+            strncpy((char*)ptr, ERROR_DELETED_MESSAGE, message_len);
+            buffer_write_adv(&(state->info_write_buff),message_len);
+            state->finished = true;
+            reset_structures(state);
+            return  0;
+        }
+        printf("MUESTRO UNO SOLO\n");
+        //Tengo que mandar solo la informacion de ese mail
+        int message_len = 3+20+1+20+3;
+        char aux[message_len];   
+        if(max<message_len){
+            return 0;//intento despues
+        }
+        email send_email = state->emails[state->state_data.transaction.arg-1];
+        snprintf(aux,message_len,"+OK %d %d\r\n",state->state_data.transaction.arg,send_email.size);
+        strncpy((char*)ptr, aux, message_len);
+        buffer_write_adv(&(state->info_write_buff),message_len);
+        state->finished = true;
+        reset_structures(state);
+        return 0; 
+    }
+
+    //Tengo que imprimir un mensaje multilinea
+    if(state->state_data.transaction.multiline_state==MULTILINE_STATE_FIRST_LINE){
+        max = 0;
+        ptr = buffer_write_ptr(&(state->info_write_buff),&max);
+        //Tengo que imprimir la primera linea de la respuesta
+        printf("TENGO QUE MUESTRAR TODA LA LISTA\n");
+
+        int message_len = strlen("+OK ") + strlen(" menssages\r\n") + 20;
+        printf("POST STRLEN\n");
+        char aux[message_len]; 
+        if(max<message_len){
+            return 0;//intento despues
+        }
+        printf("previo a snprintf\n");
+        snprintf(aux,message_len,"+OK %d menssages\r\n", state->emails_count);
+        printf("snprintf listo\n");
+        strncpy((char*)ptr, aux, message_len);
+        buffer_write_adv(&(state->info_write_buff),message_len);
+        printf("buffer_write_adv listo\n");
+        state->state_data.transaction.multiline_state = MULTILINE_STATE_MULTILINE;
+        state->state_data.transaction.mail_index = 0;
+    }
+    if(state->state_data.transaction.multiline_state==MULTILINE_STATE_MULTILINE){
+        //Tengo que imprimir todos los mails
+        for(; state->state_data.transaction.mail_index<state->emails_count; state->state_data.transaction.mail_index++){
+            if(state->emails[state->state_data.transaction.mail_index].deleted){
+                continue;
+            }
+            max = 0;
+            ptr = buffer_write_ptr(&(state->info_write_buff),&max);
+            //IMPRIMIR INFO DE CADA MAIL
+            printf("ENTRO EN EL FOR\n");
+            int message_len = 20+1+20+3;
+            char aux[message_len];   
+            if(max<message_len){
+                return 0;//intento despues
+            }
+            email send_email = state->emails[state->state_data.transaction.mail_index];
+            snprintf(aux,message_len,"%d %d\r\n",state->state_data.transaction.mail_index+1,send_email.size);
+            strncpy((char*)ptr, aux, message_len);
+            buffer_write_adv(&(state->info_write_buff),message_len);
+        }
+        state->state_data.transaction.multiline_state = MULTILINE_STATE_END_LINE;
+    }
+    
+    if(state->state_data.transaction.multiline_state==MULTILINE_STATE_END_LINE){
+        max = 0;
+        ptr = buffer_write_ptr(&(state->info_write_buff),&max);
+        int message_len = 4;
+        char aux[message_len]; 
+        if(max<message_len){
+            return 0;//intento despues
+        }
+        snprintf(aux,message_len,".\r\n", state->emails_count);
+        strncpy((char*)ptr, aux, message_len);
+        buffer_write_adv(&(state->info_write_buff),message_len);
+        reset_structures(state);
+        state->finished = true;
+
+    }
     return 0;
 }
 
@@ -673,8 +816,8 @@ int dele_action(pop3* state){
     //state
     long index = strtol(state->arg, NULL,10);
     //REvisamos si se puede eliminar
-    if( index < state->emails_count &&  index>=0 &&  !state->emails[index].deleted){
-        state->emails[index].deleted = true;
+    if( index < state->emails_count &&  index>=0 &&  !state->emails[index-1].deleted){
+        state->emails[index-1].deleted = true;
         msj_ret = OK_MESSSAGE;
     }
     strncpy((char*)ptr, msj_ret,max_len);

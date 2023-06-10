@@ -25,8 +25,6 @@
 #define ERROR_COMMAND_MESSAGE "INVALID COMMAND\n"
 #define ERROR_RETR_MESSAGE "INVALID MESSEGE NUMBER\n"
 #define ERROR_RETR_ARG_MESSEGE "MISSING MESSEGE NUMBER\n"
-#define PASSWD_PATH "/etc/passwd"
-#define MAILDIR "/home/jmentasti/maildir"
 #define ERROR_DELETED_MESSAGE "-ERR THIS MESSAGE IS DELETED\n"
 //TODO VER DE PODER PONER EL INDICE MAYOR
 #define ERROR_INDEX_MESSAGE "-ERR no such message\n"
@@ -97,17 +95,18 @@ struct pop3{
     protocol_state pop3_protocol_state;
     uint8_t read_buff[BUFFER_SIZE];
     uint8_t write_buff[BUFFER_SIZE];
-    uint8_t file_buffer[BUFFER_SIZE];
-    buffer info_file_buffer;
+    uint8_t file_buff[BUFFER_SIZE];
+    buffer info_file_buff;
     buffer info_read_buff;
     buffer info_write_buff;
     bool finished;
     parserADT parser;
     email* emails;
     size_t emails_count;
+    char* path_to_user_maildir;
+    int references;
     struct pop3args* pop3_args;
     char * user;
-
     union{
         struct authorization authorization;
         struct transaction transaction;
@@ -152,21 +151,26 @@ typedef enum{
     ERROR
 } pop3_state;
 
-void pop3_done(struct selector_key* key);
+//funciones utilizadas por la stm
 unsigned int hello_write(struct selector_key* key);
 unsigned int read_request(struct selector_key* key);
 unsigned int write_response(struct selector_key* key);
 unsigned int process_response(struct  selector_key* key);
 void finish_connection(const unsigned state, struct selector_key *key);
 void process_open_file(const unsigned state, struct selector_key *key);
+//funcion para reiniciar estructuras asociadas a un estado del protocolo
 void reset_structures(pop3* state);
+//funciones utilizadas para crear y destruir la estructura que mantiene el estado de una conexion (pop3)
 void pop3_destroy(pop3* state);
 pop3* pop3_create(void * data);
+//funciones auxiliares para las estructuras de los comandos de pop3
 bool have_argument(const char* arg);
 bool might_argument(const char* arg);
 bool not_argument(const char* arg);
 pop3_command get_command(const char* command);
 bool check_command_for_protocol_state(protocol_state pop3_protocol_state, pop3_command command);
+//acciones asociadas a un comando de pop3
+//TODO: que reciban a selector_key*
 int user_action(pop3* state);
 int pass_action(pop3* state);
 int stat_action(pop3* state);
@@ -263,15 +267,18 @@ static const struct fd_handler handler = {
     .handle_read = pop3_read,
     .handle_write = pop3_write,
     .handle_block = NULL,
-    .handle_close = NULL
+    .handle_close = pop3_close //se llama incluso cuando cierra el servidor
 };
 
+/*
+ * Funcion utilizada en el socket pasivo para aceptar una nueva conexion y agregarla al selector
+ */
 void pop3_passive_accept(struct selector_key* key) {
     printf("Se esta aceptando la conexion\n");
     //Vamos a aceptar la conexion entrante
     pop3 *state = NULL;
-    // Se crea la estructura el socket a
-    // ctivo para la conexion entrante para una direccion IPv4
+    // Se crea la estructura del socket
+    // activo para la conexion entrante para una direccion IPv4
     struct sockaddr_storage address;
     socklen_t address_len = sizeof(address);
     // Se acepta la conexion entrante, se cargan los datos en el socket activo y se devuelve el fd del socket activo
@@ -315,7 +322,9 @@ fail:
     pop3_destroy(state);
 }
 
-//crea la estructura para manejar el estado del servidor
+/*
+ * Funcion utilizada para crear la estructura pop3 que mantiene el estado de una conexion
+ */
 pop3* pop3_create(void * data){
     pop3* ans = calloc(1,sizeof(pop3));
     if(ans == NULL || errno == ENOMEM){ //errno por optimismo Linux
@@ -334,7 +343,7 @@ pop3* pop3_create(void * data){
     // Se inicializan los buffers para el cliente (uno para leer y otro para escribir)
     buffer_init(&(ans->info_read_buff), BUFFER_SIZE ,ans->read_buff);
     buffer_init(&(ans->info_write_buff), BUFFER_SIZE ,ans->write_buff);
-    buffer_init(&(ans->info_file_buffer),BUFFER_SIZE,ans->file_buffer);
+    buffer_init(&(ans->info_file_buff), BUFFER_SIZE, ans->file_buff);
     size_t max = 0;
     uint8_t * ptr = buffer_write_ptr(&(ans->info_write_buff),&max);
     strncpy((char*)ptr,WELCOME_MESSAGE,max);
@@ -344,6 +353,22 @@ pop3* pop3_create(void * data){
     return ans;
 }
 
+/*
+ * Funcion para liberar memoria asociada a la estructura pop3
+ */
+void pop3_destroy(pop3* state){
+    if(state == NULL){
+        return;
+    }
+    //Si hay campos adentro que liberar, hacerlo aca
+    free_emails(state->emails,state->emails_count);
+    free(state);
+}
+
+
+/*
+ * Funcion llamada por el selctor cuando puede leer de un fd
+ */
 void pop3_read(struct selector_key* key){
     printf("Intenta leer\n");
     // Se obtiene la maquina de estados del cliente asociado al key
@@ -351,13 +376,10 @@ void pop3_read(struct selector_key* key){
     // Se ejecuta la función de lectura para el estado actual de la maquina de estados
     const pop3_state st = stm_handler_read(stm,key);
     printf("Termina con el estado %d\n",st);
-
-//    if(FINISHED == st){
-//        pop3_done(key);
-//    }
 }
-
-
+/*
+ * Funcion llamada por el selector cuando puede escribir en un fd
+ */
 void pop3_write(struct selector_key* key){
     printf("Intenta escribir\n");
     // Se obtiene la maquina de estados del cliente asociado al key
@@ -365,35 +387,29 @@ void pop3_write(struct selector_key* key){
     // Se ejecuta la función de lectura para el estado actual de la maquina de estados
     const pop3_state st = stm_handler_write(stm,key);
     printf("Termina con el estado %d\n",st);
-
-//    if(FINISHED == st){
-//        pop3_done(key);
-//    }
 }
-
-
+/*
+ * Funcion llamada por el selector cuando se llama a selector_unregister_fd (es decir, cuando se saca al fd del selector)
+ */
 void pop3_close(struct selector_key* key){
-    pop3_destroy(GET_POP3(key));
-}
-
-
-void pop3_done(struct selector_key* key){
-    if (selector_unregister_fd(key->s, key->fd) != SELECTOR_SUCCESS) {
-        abort();
-    }
-    pop3_destroy(GET_POP3(key));
+    pop3 *data = GET_POP3(key);
     close(key->fd);
-}
-
-//borrar y liberar el pop3
-void pop3_destroy(pop3* state){
-    if(state == NULL){
-        return;
+    //No puedo determinar el orden en el que se llama (puede ser primero con el archivo o con la conexion)
+    //por lo que usamos references para que se libere al estado de la conexion en el ultimo que se llama
+    if(data->references==0){
+        //soy el ultimo con referencia al estado, lo libero
+        pop3_destroy(data);
+    }else{
+        (data->references)--;
     }
-
-    //Liberamos la estructura para el estado
-    free(state);
 }
+
+
+/*
+ * --------------------------------------------------------------------------------------
+ * Funciones utilizadas por la stm para sus estados
+ * --------------------------------------------------------------------------------------
+ */
 
 unsigned hello_write(struct selector_key* key){
     pop3* state = GET_POP3(key);
@@ -406,13 +422,14 @@ unsigned hello_write(struct selector_key* key){
         return FINISHED;
     }
     buffer_read_adv(&(state->info_write_buff),sent_count);
-
-    //Si ya no hay mas para escribir y el comando termino de generar la respuesta
-    if(!buffer_can_read(&(state->info_write_buff))){
-        if(selector_set_interest(key->s,key->fd,OP_READ) != SELECTOR_SUCCESS){
-            printf("Error cambiando el interes del socket para leer\n");
-            return FINISHED;
-        }
+    //si no pude mandar el mensaje de bienvenida completo
+    if(buffer_can_read(&(state->info_write_buff))){
+        return HELLO;
+    }
+    //Si ya no hay mas para escribir y termine con el mensaje de bienvenida
+    if(selector_set_interest(key->s,key->fd,OP_READ) != SELECTOR_SUCCESS){
+        printf("Error cambiando el interes del socket para leer\n");
+        return FINISHED;
     }
     return READING_REQUEST;
 }
@@ -546,25 +563,23 @@ unsigned int write_response(struct selector_key* key){
 }
 
 void finish_connection(const unsigned state, struct selector_key *key){
-    //TODO: cerrar tanto al archivo como el socket ahora que tenemos los 2 casos
+    pop3 * data = GET_POP3(key);
+    if(data->pop3_protocol_state == TRANSACTION && data->state_data.transaction.file_opened){
+        //Cierro el archivo, lo saco del selector
+        if(selector_unregister_fd(key->s, data->state_data.transaction.file_fd) != SELECTOR_SUCCESS){
+            abort();
+        }
+    }
     if (selector_unregister_fd(key->s, key->fd) != SELECTOR_SUCCESS) {
         abort();
     }
-    pop3_destroy(GET_POP3(key));
-    close(key->fd);
+    //con selector_unregister_fd, se va a llamar a la funcion pop3_close
 }
-void reset_structures(pop3* data){
-    //TODO: cambiar a memset
-    //Reinicia todos los campos en los structs de los unions
-    data->state_data.authorization.pass = NULL;
-    data->state_data.authorization.pass = NULL;
-    data->state_data.transaction.arg = 0;
-    data->state_data.transaction.arg_processed = false;
-    data->state_data.transaction.has_arg = false;
-    data->state_data.transaction.mail_index = 0;
-    data->state_data.transaction.multiline_state = MULTILINE_STATE_FIRST_LINE;
-    data->state_data.transaction.file_opened = false;
+void reset_structures(pop3* state){
+    memset(&(state->state_data),0,sizeof(state->state_data));
+    //Si hay que dejar alguna cosa distinta, hacerlo aca
 }
+
 bool check_command_for_protocol_state(protocol_state pop3_protocol_state, pop3_command command){
     switch (pop3_protocol_state) {
         case AUTHORIZATION:
@@ -903,11 +918,11 @@ int retr_action(pop3* state){
     }
     if(state->state_data.transaction.multiline_state == MULTILINE_STATE_MULTILINE){
         //El archivo fue abierto
-        if(!buffer_can_read(&(state->info_file_buffer)) && !state->state_data.transaction.file_ended){
+        if(!buffer_can_read(&(state->info_file_buff)) && !state->state_data.transaction.file_ended){
             //Tengo que volver a leer del archivo
             return PROCESSING_RESPONSE;
         }
-        if(!buffer_can_read(&(state->info_file_buffer)) && state->state_data.transaction.file_ended){
+        if(!buffer_can_read(&(state->info_file_buff)) && state->state_data.transaction.file_ended){
             //Tengo que volver a leer del archivo
             state->state_data.transaction.multiline_state = MULTILINE_STATE_END_LINE;
         }else {
@@ -915,7 +930,8 @@ int retr_action(pop3* state){
             size_t write_max = 0;
             uint8_t *write_ptr = buffer_write_ptr(&(state->info_write_buff), &write_max);
             size_t file_max = 0;
-            uint8_t *file_ptr = buffer_read_ptr(&(state->info_file_buffer), &file_max);
+            uint8_t *file_ptr = buffer_read_ptr(&(state->info_file_buff), &file_max);
+            //TODO: tiene que mantenerse entre idas y vueltas, y tiene que estar en 2 al principio para
             int flag = 0;
             //siempre me quedo con al menos 2 espacios en el de write por si tengo que hacer byte stuffing
             size_t write = 0, file = 0;
@@ -929,7 +945,7 @@ int retr_action(pop3* state){
             }
             //No avanzar el maximo, por si se queda un caracter en el buffer del archivo que no se procesa por no tener 2 espacios en el de salida
             buffer_write_adv(&(state->info_write_buff), write);
-            buffer_read_adv(&(state->info_file_buffer), file);
+            buffer_read_adv(&(state->info_file_buff), file);
         }
     }
     if(state->state_data.transaction.multiline_state == MULTILINE_STATE_END_LINE){
@@ -974,6 +990,7 @@ void process_open_file(const unsigned state, struct selector_key *key){
         data->state_data.transaction.file_fd = file_fd; //lo guardamos para ir y volver
         data->state_data.transaction.file_opened = true;
         selector_register(key->s,file_fd,&handler,OP_READ,data);
+        (data->references)++;
         free(path);
         return;
     }
@@ -987,7 +1004,7 @@ unsigned int process_response(struct  selector_key* key){
     }
     //Leer del archivo y mandarlo a el buffer intermedio
     size_t max = 0;
-    uint8_t* ptr = buffer_write_ptr(&(state->info_file_buffer),&max);
+    uint8_t* ptr = buffer_write_ptr(&(state->info_file_buff), &max);
     //Estoy leyendo del archivo, y me deberian llamar aca con key en el archivo
     ssize_t read_count = read(key->fd, ptr, max);
     if(read_count==0){
@@ -999,7 +1016,7 @@ unsigned int process_response(struct  selector_key* key){
         return FINISHED;
     }
     //Avanzamos la escritura en el buffer
-    buffer_write_adv(&(state->info_file_buffer),read_count);
+    buffer_write_adv(&(state->info_file_buff), read_count);
     if(selector_set_interest(key->s,state->connection_fd, OP_WRITE) != SELECTOR_SUCCESS
         || selector_set_interest(key->s,state->state_data.transaction.file_fd,OP_NOOP)!= SELECTOR_SUCCESS){
         printf("No pude volver a escritura de la respuesta\n");

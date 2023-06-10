@@ -27,8 +27,10 @@ sigterm_handler(const int signal) {
 
 
 int main(int argc, const char* argv[]) {
-
     struct pop3args* pop3_args = malloc(sizeof(struct pop3args));
+    if(pop3_args == NULL || errno == ENOMEM){
+        return 1;
+    }
     parse_args(argc, argv, pop3_args);
 
     // No queremos que se haga buffering de la salida estandar (que se envíe al recibir un \n), sino que se envíe inmediatamente
@@ -186,6 +188,7 @@ int main(int argc, const char* argv[]) {
     if(server >= 0) {
         close(server);
     }
-
+    free(pop3_args->maildir_path);
+    free(pop3_args); //sabemos que fue reservado porque si no ni siquiera llegabamos aca
     return ret;
 }

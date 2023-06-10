@@ -15,6 +15,8 @@
 #include "./parserADT/parserADT.h"
 #include "args.h"
 
+#define MAX_CMD 5
+#define MAX_ARG 41
 #define WELCOME_MESSAGE "POP3 server\r\n"
 #define USER_INVALID_MESSAGE "-ERR INVALID USER\r\n"
 #define USER_VALID_MESSAGE "+OK send PASS\r\n"
@@ -92,7 +94,8 @@ typedef enum{
 struct pop3{
     int connection_fd;
     pop3_command command;
-    char * arg;
+    char  arg[MAX_ARG];
+    char  cmd[MAX_CMD];
     struct state_machine stm;
     protocol_state pop3_protocol_state;
     uint8_t read_buff[BUFFER_SIZE];
@@ -467,15 +470,10 @@ unsigned int read_request(struct selector_key* key){
         if(parser == PARSER_FINISHED || parser == PARSER_ERROR){
             //avanzamos solo hasta el fin del comando
             buffer_read_adv(&(state->info_read_buff),i+1);
-            const char* parser_command = get_cmd(state->parser);
-            //TODO: chequear bien error
-            if(parser_command == NULL){
-                return FINISHED;
-            }
-            pop3_command command = get_command(parser_command);
+            get_cmd(state->parser,state->cmd,MAX_CMD);
+            pop3_command command = get_command(state->cmd);
             state->command = command;
-            free((void*)parser_command);
-            state->arg = get_arg(state->parser);
+            get_arg(state->parser,state->arg,MAX_ARG);
             if(parser == PARSER_ERROR || command == ERROR_COMMAND || !commands[command].check(state->arg)){
                 printf("No es un comando valido");
                 state->command = ERROR_COMMAND;
@@ -530,8 +528,6 @@ unsigned int write_response(struct selector_key* key){
     //Si ya no hay mas para escribir y el comando termino de generar la respuesta
     if(!buffer_can_read(&(state->info_write_buff)) && state->finished){
         state->finished = false;
-        //TODO: chequear, si podemos hacerlo fijo mejor asi no tenemos tanta memoria dinamica
-        free(state->arg);
         //Terminamos de mandar la respuesta para el comando, vemos si nos queda otro
         size_t  max = 0;
         uint8_t* ptr = buffer_read_ptr(&(state->info_read_buff),&max);
@@ -540,15 +536,10 @@ unsigned int write_response(struct selector_key* key){
             if(parser == PARSER_FINISHED || parser == PARSER_ERROR){
                 //avanzamos solo hasta el fin del comando
                 buffer_read_adv(&(state->info_read_buff),i+1);
-                const char* parser_command = get_cmd(state->parser);
-                //TODO: chequear bien error
-                if(parser_command == NULL){
-                    return FINISHED;
-                }
-                pop3_command command = get_command(parser_command);
-                free((void*)parser_command);
+                get_cmd(state->parser,state->cmd,MAX_CMD);
+                pop3_command command = get_command(state->cmd);
                 state->command = command;
-                state->arg = get_arg(state->parser); //TODO: hacer que lo copie a un buffer de state
+                get_arg(state->parser,state->arg,MAX_ARG); //TODO: hacer que lo copie a un buffer de state
                 if(parser == PARSER_ERROR || command == ERROR_COMMAND || !commands[command].check(state->arg)){
                     printf("No es un comando valido");
                     state->command = ERROR_COMMAND;

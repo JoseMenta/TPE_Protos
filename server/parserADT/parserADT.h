@@ -13,7 +13,7 @@ typedef enum parser_state { PARSER_READING = 0, PARSER_FINISHED, PARSER_ERROR } 
  * 
  * Retorna NULL si no pudo crearse el parser
  */
-parserADT parser_init();
+parserADT parser_init(void);
 
 /** 
  * Destruye el parser 
@@ -36,18 +36,16 @@ parser_state parser_feed(parserADT p, uint8_t c);
 
 /**
  * Devuelve una copia del comando leido
- * Se debe liberar al dejar de utilizarlo
+ * en buff, copiando a lo sumo max caracteres incluido \0
  *
  * Retorna NULL si no pudo crear la copia
  */
-const char * get_cmd(parserADT p);
+void get_cmd(parserADT p, char* buff, int max);
 
 /**
  * Devuelve una copia del argumento leido
- * Se debe liberar al dejar de utilizarlo
- *
- * Retorna NULL si no pudo crear la copia
+ * en buff, copiando a lo sumo max caracteres incluido \0
  */
-char * get_arg(parserADT p);
+void get_arg(parserADT p, char* buff, int max);
 
 #endif

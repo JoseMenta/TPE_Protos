@@ -189,6 +189,7 @@ int main(int argc, const char* argv[]) {
         close(server);
     }
     free(pop3_args->maildir_path);
+    usersADT_destroy(pop3_args->users);
     free(pop3_args); //sabemos que fue reservado porque si no ni siquiera llegabamos aca
     return ret;
 }

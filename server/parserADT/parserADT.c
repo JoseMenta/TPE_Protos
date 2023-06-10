@@ -1,5 +1,6 @@
 #include <string.h>
 #include <ctype.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
 
@@ -27,7 +28,7 @@ typedef struct parserCDT {
 } parserCDT;
 
 
-parserADT parser_init() {
+parserADT parser_init(void) {
     parserADT p = malloc(sizeof(parserCDT));
     if(p != NULL) {
         p->def = get_definition();
@@ -50,21 +51,21 @@ void parser_reset(parserADT p) {
     p->arg_length = p->cmd_length = 0;
 }
 
-const char * get_cmd(parserADT p) {
-    char * cmd = calloc(p->cmd_length+1, sizeof(char));
-    if(cmd != NULL) {
-        strncpy(cmd, p->cmd, p->cmd_length);
-    }
-    return cmd;
+void get_cmd(parserADT p, char* buff, int max) {
+    char cmd [p->cmd_length+1];
+    cmd[p->cmd_length] = '\0';
+    //hago esto porque puede ser que p->cmd no sea null terminated
+    strncpy(cmd, p->cmd, p->cmd_length);
+    snprintf(buff,max,"%s",cmd);
 }
 
-char * get_arg(parserADT p) {
-    char * arg = calloc(p->arg_length+1, sizeof(char));
-    //como usamos calloc para arg_length+1, ya va a tener el \0
-    if(arg != NULL) {
-        strncpy(arg, p->arg, p->arg_length);
-    }
-    return arg;
+void get_arg(parserADT p, char* buff, int max) {
+    char arg [p->arg_length+1];
+    arg[p->arg_length] = '\0';
+    //hago esto porque puede ser que p->cmd no sea null terminated
+    strncpy(arg, p->arg, p->arg_length);
+    //usamos snprintf para copiar siempre el caracter nulo, es decir son max-1 caracteres y \0
+    snprintf(buff, max,"%s",arg);
 }
 
 

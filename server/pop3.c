@@ -270,8 +270,7 @@ void pop3_passive_accept(struct selector_key* key) {
     printf("Se esta aceptando la conexion\n");
     //Vamos a aceptar la conexion entrante
     pop3 *state = NULL;
-    // Se crea la estructura el socket a
-    // ctivo para la conexion entrante para una direccion IPv4
+    // Se crea la estructura el socket activo para la conexion entrante para una direccion IPv4
     struct sockaddr_storage address;
     socklen_t address_len = sizeof(address);
     // Se acepta la conexion entrante, se cargan los datos en el socket activo y se devuelve el fd del socket activo

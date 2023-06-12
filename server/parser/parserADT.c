@@ -13,7 +13,7 @@ typedef struct parserCDT {
 } parserCDT;
 
 
-parserADT parser_init(parser_definition * def) {
+parserADT parser_init(const parser_definition * def) {
     parserADT p = calloc(1, sizeof(parserCDT));
     if(p == NULL || errno == ENOMEM) {
         return NULL;
@@ -48,7 +48,7 @@ void parser_reset(parserADT p) {
     }
 }
 
-void * get_data(parserADT p) {
+void * parser_get_data(parserADT p) {
     if(p->def->copy == NULL) {
         return NULL;
     }

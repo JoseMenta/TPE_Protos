@@ -12,7 +12,9 @@
 #include "buffer.h"
 #include "stm.h"
 #include "maidir_reader.h"
-#include "./parserADT/parserADT.h"
+#include "./parser/parserADT.h"
+#include "./parser/parser_definition/pop3_parser_definition.h"
+#include "./parser/parser_definition/byte_stuffing_parser_definition.h"
 #include "args.h"
 
 #define WELCOME_MESSAGE "POP3 server\n"
@@ -102,7 +104,8 @@ struct pop3{
     buffer info_read_buff;
     buffer info_write_buff;
     bool finished;
-    parserADT parser;
+    parserADT pop3_parser;
+    parserADT byte_stuffing_parser;
     email* emails;
     size_t emails_count;
     struct pop3args* pop3_args;
@@ -316,6 +319,8 @@ fail:
 
 //crea la estructura para manejar el estado del servidor
 pop3* pop3_create(void * data){
+    extern const parser_definition pop3_parser_definition;
+    extern const parser_definition byte_stuffing_parser_definition;
     pop3* ans = calloc(1,sizeof(pop3));
     if(ans == NULL || errno == ENOMEM){ //errno por optimismo Linux
         printf("Error al reservar memoria para el estado");
@@ -327,7 +332,8 @@ pop3* pop3_create(void * data){
     ans->stm.max_state = ERROR;
     ans->stm.states = state_handlers;
     stm_init(&ans->stm);
-    ans->parser = parser_init();
+    ans->pop3_parser = parser_init(&pop3_parser_definition);
+    ans->byte_stuffing_parser = parser_init(&byte_stuffing_parser_definition);
     ans->pop3_args = (struct pop3args*) data;
 
     // Se inicializan los buffers para el cliente (uno para leer y otro para escribir)
@@ -390,6 +396,8 @@ void pop3_destroy(pop3* state){
         return;
     }
 
+    parser_destroy(state->pop3_parser);
+    parser_destroy(state->byte_stuffing_parser);
     //Liberamos la estructura para el estado
     free(state);
 }
@@ -433,20 +441,29 @@ unsigned int read_request(struct selector_key* key){
     //Obtenemos un puntero para lectura
     ptr = buffer_read_ptr(&(state->info_read_buff),&max);
     for(size_t i = 0; i<max; i++){
-        parser_state parser = parser_feed(state->parser, ptr[i]);
+        parser_state parser = parser_feed(state->pop3_parser, ptr[i]);
         if(parser == PARSER_FINISHED || parser == PARSER_ERROR){
             //avanzamos solo hasta el fin del comando
             buffer_read_adv(&(state->info_read_buff),i+1);
-            const char* parser_command = get_cmd(state->parser);
+            pop3_parser_data * parser_data = (pop3_parser_data *) parser_get_data(state->pop3_parser);
+            if (parser_data == NULL) {
+                printf("Error obteniendo los datos del parser\n");
+                return FINISHED;
+            }
+            const char* parser_command = parser_data->cmd;
             //TODO: chequear bien error
             if(parser_command == NULL){
                 return FINISHED;
             }
             pop3_command command = get_command(parser_command);
             state->command = command;
-            free((void*)parser_command);
-            state->arg = get_arg(state->parser);
-            if(parser == PARSER_ERROR || command == ERROR_COMMAND || !commands[command].check(get_arg(state->parser))){
+            state->arg = get_pop3_arg(parser_data);
+            if (state->arg == NULL) {
+                printf("Error obteniendo el argumento del comando\n");
+                return FINISHED;
+            }
+            free((void*)parser_data);
+            if(parser == PARSER_ERROR || command == ERROR_COMMAND || !commands[command].check(state->arg)){
                 printf("No es un comando valido");
                 state->command = ERROR_COMMAND;
             }
@@ -454,7 +471,7 @@ unsigned int read_request(struct selector_key* key){
                 printf("Comando no permitido\n");
                 state->command = ERROR_COMMAND;
             }
-            parser_reset(state->parser);
+            parser_reset(state->pop3_parser);
             //Vamos a procesar la respuesta
             if(selector_set_interest(key->s,key->fd,OP_WRITE) != SELECTOR_SUCCESS){
                 printf("Error cambiando el interes del socket para escribir\n");
@@ -506,20 +523,29 @@ unsigned int write_response(struct selector_key* key){
         size_t  max = 0;
         uint8_t* ptr = buffer_read_ptr(&(state->info_read_buff),&max);
         for(size_t i = 0; i<max; i++){
-            parser_state parser = parser_feed(state->parser, ptr[i]);
+            parser_state parser = parser_feed(state->pop3_parser, ptr[i]);
             if(parser == PARSER_FINISHED || parser == PARSER_ERROR){
                 //avanzamos solo hasta el fin del comando
                 buffer_read_adv(&(state->info_read_buff),i+1);
-                const char* parser_command = get_cmd(state->parser);
+                pop3_parser_data * parser_data = (pop3_parser_data *) parser_get_data(state->pop3_parser);
+                if (parser_data == NULL) {
+                    printf("Error obteniendo los datos del parser\n");
+                    return FINISHED;
+                }
+                const char* parser_command = parser_data->cmd;
                 //TODO: chequear bien error
                 if(parser_command == NULL){
                     return FINISHED;
                 }
                 pop3_command command = get_command(parser_command);
-                free((void*)parser_command);
                 state->command = command;
-                state->arg = get_arg(state->parser);
-                if(parser == PARSER_ERROR || command == ERROR_COMMAND || !commands[command].check(get_arg(state->parser))){
+                state->arg = get_pop3_arg(parser_data);
+                if (state->arg == NULL) {
+                    printf("Error obteniendo el argumento del comando\n");
+                    return FINISHED;
+                }
+                free((void*)parser_data);
+                if(parser == PARSER_ERROR || command == ERROR_COMMAND || !commands[command].check(state->arg)){
                     printf("No es un comando valido");
                     state->command = ERROR_COMMAND;
                 }
@@ -527,7 +553,7 @@ unsigned int write_response(struct selector_key* key){
                     printf("Comando no permitido\n");
                     state->command = ERROR_COMMAND;
                 }
-                parser_reset(state->parser);
+                parser_reset(state->pop3_parser);
                 return WRITING_RESPONSE; //vamos a escribir la respuesta
             }
         }
@@ -919,10 +945,9 @@ int retr_action(pop3* state){
             //siempre me quedo con al menos 2 espacios en el de write por si tengo que hacer byte stuffing
             size_t write = 0, file = 0;
             for (; file < file_max && write < write_max - 1; write++, file++) {
-                flag = get_flag(flag, (char) file_ptr[file]);
-                if (flag == 3) {
-                    //vi un punto al inicio de una linea nueva
-                    write_ptr[write++] = '.'; //agrego un punto al principio
+                if(PARSER_ACTION == parser_feed(state->byte_stuffing_parser, file_ptr[file])) {
+                    //tengo que hacer byte stuffing
+                    write_ptr[write++] = '.';
                 }
                 write_ptr[write] = file_ptr[file];
             }
@@ -943,6 +968,7 @@ int retr_action(pop3* state){
         snprintf(aux,message_len,"\r\n.\r\n", state->emails_count);
         strncpy((char*)ptr, aux, message_len);
         buffer_write_adv(&(state->info_write_buff),message_len);
+        parser_reset(state->byte_stuffing_parser);
         reset_structures(state);
         state->finished = true;
     }

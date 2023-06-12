@@ -1,5 +1,4 @@
 #include "byte_stuffing_parser_definition.h"
-#include "parser_definition.h"
 
 #define ASCII_CR                    0x0D
 #define ASCII_LF                    0X0A
@@ -58,7 +57,7 @@ static const size_t states_n [] = {
         N(ST_CR)
 };
 
-const struct parser_definition byte_stuffing_parser_definition = {
+const parser_definition byte_stuffing_parser_definition = {
         .states_count = N(states),
         .states       = states,
         .states_n     = states_n,

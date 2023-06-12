@@ -3,7 +3,6 @@
 #include <string.h>
 #include <errno.h>
 #include "pop3_parser_definition.h"
-#include "parser_definition.h"
 
 #define ASCII_a                     0x61
 #define ASCII_z                     0x7A
@@ -119,7 +118,7 @@ static const size_t states_n [] = {
         N(ST_ERR),
 };
 
-const struct parser_definition pop3_parser_definition = {
+const parser_definition pop3_parser_definition = {
         .states_count = N(states),
         .states       = states,
         .states_n     = states_n,
@@ -129,6 +128,24 @@ const struct parser_definition pop3_parser_definition = {
         .reset        = pop3_parser_reset,
         .destroy      = pop3_parser_destroy
 };
+
+char * get_pop3_cmd(pop3_parser_data * d) {
+    char * copy = calloc(d->cmd_length + 1, sizeof(char));
+    if (copy == NULL) {
+        return NULL;
+    }
+    strncpy(copy, d->cmd, d->cmd_length);
+    return copy;
+}
+
+char * get_pop3_arg(pop3_parser_data * d) {
+    char * copy = calloc(d->arg_length + 1, sizeof(char));
+    if (copy == NULL) {
+        return NULL;
+    }
+    strncpy(copy, d->arg, d->arg_length);
+    return copy;
+}
 
 // Condiciones
 static bool is_letter(uint8_t c) {

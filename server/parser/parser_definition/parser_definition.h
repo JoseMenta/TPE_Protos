@@ -27,8 +27,9 @@ struct parser_state_transition {
     parser_action       action;
 };
 
+
 /** declaración completa de una máquina de estados */
-struct parser_definition {
+typedef struct parser_definition {
     /** cantidad de estados */
     const unsigned                         states_count;
     /** por cada estado, sus transiciones */
@@ -56,6 +57,6 @@ struct parser_definition {
     /** función para destruir la estructura data */
     /** si no se necesita data, se puede pasar NULL */
     parser_definition_destroy destroy;
-};
+} parser_definition;
 
 #endif

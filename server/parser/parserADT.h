@@ -5,14 +5,13 @@
 #include "parser_definition/parser_definition.h"
 
 typedef struct parserCDT * parserADT;
-typedef struct parser_definition parser_definition;
 
 /**
  * Inicializa el parser segun la definicion pasada
  *
  * Retorna NULL si no pudo crearse el parser o inicializar la estructura de datos
  */
-parserADT parser_init(parser_definition * def);
+parserADT parser_init(const parser_definition * def);
 
 /**
  * Destruye el parser y la estructura de datos
@@ -35,8 +34,11 @@ parser_state parser_feed(parserADT p, uint8_t c);
 
 /**
  * Devuelve una copia de la estructura data
+ * Devuelve NULL si no se pudo realizar la copia o si no se necesita data
+ *
+ * Se debe liberar la memoria con free
  */
-void * get_data(parserADT p);
+void * parser_get_data(parserADT p);
 
 #endif
 

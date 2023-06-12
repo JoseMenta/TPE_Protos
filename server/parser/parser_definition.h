@@ -4,9 +4,11 @@
 
 #include <stdint.h>
 #include <stddef.h>
-#include "parserADT.h"
+#include <stdbool.h>
 
 #define N(x) (sizeof(x)/sizeof((x)[0]))
+
+typedef enum parser_state { PARSER_READING = 0, PARSER_ACTION, PARSER_FINISHED, PARSER_ERROR } parser_state;
 
 typedef bool (*parser_condition)(uint8_t c);
 typedef parser_state (*parser_action)(void * data, uint8_t c);

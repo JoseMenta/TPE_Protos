@@ -5,15 +5,14 @@
 #include "parser_definition.h"
 
 typedef struct parserCDT * parserADT;
-
-typedef enum parser_state { PARSER_READING = 0, PARSER_ACTION, PARSER_FINISHED, PARSER_ERROR } parser_state;
+typedef struct parser_definition parser_definition;
 
 /**
  * Inicializa el parser segun la definicion pasada
  *
  * Retorna NULL si no pudo crearse el parser o inicializar la estructura de datos
  */
-parserADT parser_init(parser_definition def);
+parserADT parser_init(parser_definition * def);
 
 /**
  * Destruye el parser y la estructura de datos

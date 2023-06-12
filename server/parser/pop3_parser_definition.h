@@ -1,6 +1,11 @@
 #ifndef __POP3_PARSER_DEFINITION_H__
 #define __POP3_PARSER_DEFINITION_H__
 
+#include <stdint.h>
+
+#define CMD_LENGTH                  4
+#define ARG_MAX_LENGTH              40
+
 // Datos
 typedef struct pop3_parser_data {
     char cmd[CMD_LENGTH+1];         // Command string

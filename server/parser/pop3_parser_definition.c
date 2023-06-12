@@ -1,13 +1,10 @@
 #include <ctype.h>
-#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
 #include "pop3_parser_definition.h"
 #include "parser_definition.h"
 
-#define CMD_LENGTH                  4
-#define ARG_MAX_LENGTH              40
 #define ASCII_a                     0x61
 #define ASCII_z                     0x7A
 #define ASCII_PRINTABLE_MIN         0x21
@@ -56,46 +53,46 @@ enum pop3_states {
 };
 
 static const struct parser_state_transition ST_INIT [] =  {
-        { .when = is_letter,           .dest = CMD_1,        .type = cmd_action },
-        { .when = is_cr,               .dest = MAYEND,       .type = err_action },
-        { .when = is_any,              .dest = ERRST,        .type = err_action },
+        { .when = is_letter,           .dest = CMD_1,        .action = cmd_action },
+        { .when = is_cr,               .dest = MAYEND,       .action = err_action },
+        { .when = is_any,              .dest = ERRST,        .action = err_action },
 };
 static const struct parser_state_transition ST_CMD_1 [] =  {
-        { .when = is_letter,          .dest = CMD_2,        .type = cmd_action },
-        { .when = is_cr,              .dest = MAYEND,       .type = err_action },
-        { .when = is_any,             .dest = ERRST,        .type = err_action },
+        { .when = is_letter,          .dest = CMD_2,        .action = cmd_action },
+        { .when = is_cr,              .dest = MAYEND,       .action = err_action },
+        { .when = is_any,             .dest = ERRST,        .action = err_action },
 };
 static const struct parser_state_transition ST_CMD_2 [] =  {
-        { .when = is_letter,          .dest = CMD_3,        .type = cmd_action },
-        { .when = is_cr,              .dest = MAYEND,       .type = err_action },
-        { .when = is_any,             .dest = ERRST,        .type = err_action },
+        { .when = is_letter,          .dest = CMD_3,        .action = cmd_action },
+        { .when = is_cr,              .dest = MAYEND,       .action = err_action },
+        { .when = is_any,             .dest = ERRST,        .action = err_action },
 };
 static const struct parser_state_transition ST_CMD_3 [] =  {
-        { .when = is_letter,          .dest = CMD_4,        .type = cmd_action },
-        { .when = is_cr,              .dest = MAYEND,       .type = err_action },
-        { .when = is_any,             .dest = ERRST,        .type = err_action },
+        { .when = is_letter,          .dest = CMD_4,        .action = cmd_action },
+        { .when = is_cr,              .dest = MAYEND,       .action = err_action },
+        { .when = is_any,             .dest = ERRST,        .action = err_action },
 };
 static const struct parser_state_transition ST_CMD_4 [] =  {
-        { .when = is_space,           .dest = ARGST,        .type = def_action },
-        { .when = is_cr,              .dest = MAYEND,       .type = def_action },
-        { .when = is_any,             .dest = ERRST,        .type = err_action },
+        { .when = is_space,           .dest = ARGST,        .action = def_action },
+        { .when = is_cr,              .dest = MAYEND,       .action = def_action },
+        { .when = is_any,             .dest = ERRST,        .action = err_action },
 };
 static const struct parser_state_transition ST_ARG [] =  {
-        { .when = is_printable,        .dest = ARGST,          .type = arg_action },
-        { .when = is_cr,               .dest = MAYEND,         .type = def_action },
-        { .when = is_any,              .dest = ERRST,          .type = err_action },
+        { .when = is_printable,        .dest = ARGST,          .action = arg_action },
+        { .when = is_cr,               .dest = MAYEND,         .action = def_action },
+        { .when = is_any,              .dest = ERRST,          .action = err_action },
 };
 static const struct parser_state_transition ST_MAYEND [] =  {
-        { .when = is_lf,               .dest = ENDST,          .type = end_action },
-        { .when = is_cr,               .dest = MAYEND,         .type = err_action },
-        { .when = is_any,              .dest = ERRST,          .type = err_action },
+        { .when = is_lf,               .dest = ENDST,          .action = end_action },
+        { .when = is_cr,               .dest = MAYEND,         .action = err_action },
+        { .when = is_any,              .dest = ERRST,          .action = err_action },
 };
 static const struct parser_state_transition ST_END [] =  {
-        { .when = is_any,              .dest = ENDST,          .type= def_action},
+        { .when = is_any,              .dest = ENDST,          .action= def_action},
 };
 static const struct parser_state_transition ST_ERR [] =  {
-        { .when = is_cr,               .dest = MAYEND,         .type = err_action },
-        { .when = is_any,              .dest = ERRST,          .type = err_action },
+        { .when = is_cr,               .dest = MAYEND,         .action = err_action },
+        { .when = is_any,              .dest = ERRST,          .action = err_action },
 };
 
 static const struct parser_state_transition *states [] = {
@@ -157,7 +154,7 @@ static bool is_any(uint8_t c) {
 // Acciones
 static parser_state cmd_action(void * data, uint8_t c) {
     pop3_parser_data * d = (pop3_parser_data *) data;
-    if (d->cmd_length < MAX_CMD_LENGTH) {
+    if (d->cmd_length < CMD_LENGTH) {
         d->cmd[d->cmd_length++] = c;
         return PARSER_READING;
     }
@@ -165,7 +162,7 @@ static parser_state cmd_action(void * data, uint8_t c) {
 }
 static parser_state arg_action(void * data, uint8_t c) {
     pop3_parser_data * d = (pop3_parser_data *) data;
-    if (d->arg_length < MAX_ARG_LENGTH) {
+    if (d->arg_length < ARG_MAX_LENGTH) {
         d->arg[d->arg_length++] = c;
         return PARSER_READING;
     }
@@ -212,7 +209,7 @@ static void pop3_parser_reset(void * data) {
     d->cmd_length = 0;
     d->arg_length = 0;
     memset(d->cmd, 0, CMD_LENGTH+1);
-    memset(d->arg, 0, ARG_LENGTH+1);
+    memset(d->arg, 0, ARG_MAX_LENGTH+1);
 }
 
 // Destruccion

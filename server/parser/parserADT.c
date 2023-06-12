@@ -1,5 +1,4 @@
 #include <string.h>
-#include <ctype.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <stdbool.h>
@@ -19,7 +18,7 @@ parserADT parser_init(parser_definition * def) {
     if(p == NULL || errno == ENOMEM) {
         return NULL;
     }
-    if (def.init != NULL) {
+    if (def->init != NULL) {
         p->data = def->init();
         if(p->data == NULL) {
             free(p);
@@ -29,6 +28,7 @@ parserADT parser_init(parser_definition * def) {
     p->def = def;
     p->state = def->start_state;
     p->parser_state = PARSER_READING;
+    return p;
 }
 
 void parser_destroy(parserADT p) {
@@ -74,8 +74,9 @@ parser_state parser_feed(parserADT p, uint8_t c) {
             }
             else if (resp == PARSER_ERROR) {
                 p->parser_state = PARSER_ERROR;
+            } else if (resp == PARSER_ACTION) {
+                return resp;
             }
-            return resp;
         }
     }
     return PARSER_READING;

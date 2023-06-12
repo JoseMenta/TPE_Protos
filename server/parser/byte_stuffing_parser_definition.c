@@ -1,4 +1,3 @@
-#include <stdint.h>
 #include "byte_stuffing_parser_definition.h"
 #include "parser_definition.h"
 
@@ -25,24 +24,24 @@ enum byte_stuffing_states {
 };
 
 static const struct parser_state_transition ST_LF [] =  {
-        { .when = is_dot,           .dest = DOT,        .type = dot_action },
-        { .when = is_cr,            .dest = CR,         .type = def_action },
-        { .when = is_any,           .dest = ANY,        .type = def_action },
+        { .when = is_dot,           .dest = DOT,        .action = dot_action },
+        { .when = is_cr,            .dest = CR,         .action = def_action },
+        { .when = is_any,           .dest = ANY,        .action = def_action },
 };
 
 static const struct parser_state_transition ST_DOT [] =  {
-        { .when = is_cr,            .dest = CR,         .type = def_action },
-        { .when = is_any,           .dest = ANY,        .type = def_action },
+        { .when = is_cr,            .dest = CR,         .action = def_action },
+        { .when = is_any,           .dest = ANY,        .action = def_action },
 };
 
 static const struct parser_state_transition ST_ANY [] =  {
-        { .when = is_cr,            .dest = CR,         .type = def_action },
-        { .when = is_any,           .dest = ANY,        .type = def_action },
+        { .when = is_cr,            .dest = CR,         .action = def_action },
+        { .when = is_any,           .dest = ANY,        .action = def_action },
 };
 
 static const struct parser_state_transition ST_CR [] =  {
-        { .when = is_lf,            .dest = LF,         .type = def_action },
-        { .when = is_any,           .dest = ANY,        .type = def_action },
+        { .when = is_lf,            .dest = LF,         .action = def_action },
+        { .when = is_any,           .dest = ANY,        .action = def_action },
 };
 
 static const struct parser_state_transition *states [] = {

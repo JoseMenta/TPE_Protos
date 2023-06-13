@@ -12,7 +12,9 @@
 #include "buffer.h"
 #include "stm.h"
 #include "maidir_reader.h"
-#include "./parserADT/parserADT.h"
+#include "./parser/parserADT.h"
+#include "./parser/parser_definition/pop3_parser_definition.h"
+#include "./parser/parser_definition/byte_stuffing_parser_definition.h"
 #include "args.h"
 
 #define MAX_CMD 5
@@ -105,7 +107,8 @@ struct pop3{
     buffer info_read_buff;
     buffer info_write_buff;
     bool finished;
-    parserADT parser;
+    parserADT pop3_parser;
+    parserADT byte_stuffing_parser;
     email* emails;
     size_t emails_count;
     char* path_to_user_maildir;
@@ -288,7 +291,7 @@ void pop3_passive_accept(struct selector_key* key) {
     //Vamos a aceptar la conexion entrante
     pop3 *state = NULL;
     // Se crea la estructura del socket
-    // activo para la conexion entrante para una direccion IPv4
+    // activo para la conexion entrante
     struct sockaddr_storage address;
     socklen_t address_len = sizeof(address);
     // Se acepta la conexion entrante, se cargan los datos en el socket activo y se devuelve el fd del socket activo
@@ -336,6 +339,8 @@ fail:
  * Funcion utilizada para crear la estructura pop3 que mantiene el estado de una conexion
  */
 pop3* pop3_create(void * data){
+    extern const parser_definition pop3_parser_definition;
+    extern const parser_definition byte_stuffing_parser_definition;
     pop3* ans = calloc(1,sizeof(pop3));
     if(ans == NULL || errno == ENOMEM){ //errno por optimismo Linux
         printf("Error al reservar memoria para el estado");
@@ -347,8 +352,9 @@ pop3* pop3_create(void * data){
     ans->stm.max_state = ERROR;
     ans->stm.states = state_handlers;
     stm_init(&ans->stm);
-    ans->parser = parser_init();
-    ans->pop3_args = (struct pop3args*) data; //esto es liberado por main
+    ans->pop3_parser = parser_init(&pop3_parser_definition);
+    ans->byte_stuffing_parser = parser_init(&byte_stuffing_parser_definition);
+    ans->pop3_args = (struct pop3args*) data;
 
     // Se inicializan los buffers para el cliente (uno para leer y otro para escribir)
     buffer_init(&(ans->info_read_buff), BUFFER_SIZE ,ans->read_buff);
@@ -371,9 +377,12 @@ void pop3_destroy(pop3* state){
         return;
     }
     //Si hay campos adentro que liberar, hacerlo aca
-    parser_destroy(state->parser);
+    parser_destroy(state->pop3_parser);
+    parser_destroy(state->byte_stuffing_parser);
     free_emails(state->emails,state->emails_count);
-    free(state->path_to_user_maildir);
+    if(state->path_to_user_maildir != NULL){
+        free(state->path_to_user_maildir);
+    }
     free(state);
 }
 /*
@@ -466,14 +475,33 @@ unsigned int read_request(struct selector_key* key){
     //Obtenemos un puntero para lectura
     ptr = buffer_read_ptr(&(state->info_read_buff),&max);
     for(size_t i = 0; i<max; i++){
-        parser_state parser = parser_feed(state->parser, ptr[i]);
+        parser_state parser = parser_feed(state->pop3_parser, ptr[i]);
         if(parser == PARSER_FINISHED || parser == PARSER_ERROR){
             //avanzamos solo hasta el fin del comando
             buffer_read_adv(&(state->info_read_buff),i+1);
-            get_cmd(state->parser,state->cmd,MAX_CMD);
+            get_pop3_cmd(state->pop3_parser,state->cmd,MAX_CMD);
+//            pop3_parser_data * parser_data = (pop3_parser_data *) parser_get_data(state->pop3_parser);
+//            if (parser_data == NULL) {
+//                printf("Error obteniendo los datos del parser\n");
+//                return FINISHED;
+//            }
+
+//            const char* parser_command = parser_data->cmd;
+//            TODO: chequear bien error
+//            if(parser_command == NULL){
+//                return FINISHED;
+//            }
             pop3_command command = get_command(state->cmd);
             state->command = command;
-            get_arg(state->parser,state->arg,MAX_ARG);
+            get_pop3_arg(state->pop3_parser,state->arg,MAX_ARG);
+//            pop3_command command = get_command(parser_command);
+//            state->command = command;
+//            state->arg = get_pop3_arg(parser_data);
+//            if (state->arg == NULL) {
+//                printf("Error obteniendo el argumento del comando\n");
+//                return FINISHED;
+//            }
+//            free((void*)parser_data);
             if(parser == PARSER_ERROR || command == ERROR_COMMAND || !commands[command].check(state->arg)){
                 printf("No es un comando valido");
                 state->command = ERROR_COMMAND;
@@ -482,7 +510,7 @@ unsigned int read_request(struct selector_key* key){
                 printf("Comando no permitido\n");
                 state->command = ERROR_COMMAND;
             }
-            parser_reset(state->parser);
+            parser_reset(state->pop3_parser);
             //Vamos a procesar la respuesta
             if(selector_set_interest(key->s,key->fd,OP_WRITE) != SELECTOR_SUCCESS){
                 printf("Error cambiando el interes del socket para escribir\n");
@@ -532,14 +560,30 @@ unsigned int write_response(struct selector_key* key){
         size_t  max = 0;
         uint8_t* ptr = buffer_read_ptr(&(state->info_read_buff),&max);
         for(size_t i = 0; i<max; i++){
-            parser_state parser = parser_feed(state->parser, ptr[i]);
+            parser_state parser = parser_feed(state->pop3_parser, ptr[i]);
             if(parser == PARSER_FINISHED || parser == PARSER_ERROR){
                 //avanzamos solo hasta el fin del comando
                 buffer_read_adv(&(state->info_read_buff),i+1);
-                get_cmd(state->parser,state->cmd,MAX_CMD);
+//                pop3_parser_data * parser_data = (pop3_parser_data *) parser_get_data(state->pop3_parser);
+//                if (parser_data == NULL) {
+//                    printf("Error obteniendo los datos del parser\n");
+//                    return FINISHED;
+//                }
+                get_pop3_cmd(state->pop3_parser,state->cmd,MAX_CMD);
+//                const char* parser_command = parser_data->cmd;
+//                TODO: chequear bien error
+//                if(parser_command == NULL){
+//                    return FINISHED;
+//                }
                 pop3_command command = get_command(state->cmd);
                 state->command = command;
-                get_arg(state->parser,state->arg,MAX_ARG); //TODO: hacer que lo copie a un buffer de state
+                get_pop3_arg(state->pop3_parser,state->arg,MAX_ARG);
+//                state->arg = get_pop3_arg(parser_data);
+//                if (state->arg == NULL) {
+//                    printf("Error obteniendo el argumento del comando\n");
+//                    return FINISHED;
+//                }
+//                free((void*)parser_data);
                 if(parser == PARSER_ERROR || command == ERROR_COMMAND || !commands[command].check(state->arg)){
                     printf("No es un comando valido");
                     state->command = ERROR_COMMAND;
@@ -548,7 +592,7 @@ unsigned int write_response(struct selector_key* key){
                     printf("Comando no permitido\n");
                     state->command = ERROR_COMMAND;
                 }
-                parser_reset(state->parser);
+                parser_reset(state->pop3_parser);
                 return WRITING_RESPONSE; //vamos a escribir la respuesta
             }
         }
@@ -714,6 +758,7 @@ int stat_action(pop3* state){
             aux_len_emails += state->emails[i].size;
         }
     }
+    //TODO: no contar nos eliminados
     snprintf(aux,max_len,"+OK %zu %ld\r\n",state->emails_count,aux_len_emails);
     if(try_write(aux,&(state->info_write_buff)) == TRY_PENDING){
         printf("Intento escribir en el buffer en stat_action y no tengo espacio\n");
@@ -789,7 +834,7 @@ int list_action(pop3* state){
                 continue;
             }
             int message_len = 20+1+20+3;
-            char aux[message_len];   
+            char aux[message_len];
             email send_email = state->emails[state->state_data.transaction.mail_index];
             snprintf(aux,message_len,"%d %ld\r\n",state->state_data.transaction.mail_index+1,send_email.size);
             if (try_write(aux, &(state->info_write_buff)) == TRY_PENDING) {
@@ -830,7 +875,7 @@ int retr_action(pop3* state){
     if(!state->state_data.transaction.arg_processed && strlen(state->arg) != 0){
         state->state_data.transaction.has_arg = true;
         state->state_data.transaction.arg = strtol(state->arg, NULL,10);
-        //TODO: manejar el caso donde no se puede convertir
+        //TODO: manejar el caso donde no se puede convertir el argumento
     }else{
         state->state_data.transaction.has_arg = false;
     }
@@ -888,8 +933,8 @@ int retr_action(pop3* state){
         //siempre me quedo con al menos 2 espacios en el de write por si tengo que hacer byte stuffing
         size_t write = 0, file = 0;
         for (; file < file_max && write < write_max - 1; write++, file++) {
-            state->state_data.transaction.flag = get_flag(state->state_data.transaction.flag, (char) file_ptr[file]);
-            if (state->state_data.transaction.flag == 3) {
+            if(PARSER_ACTION == parser_feed(state->byte_stuffing_parser, file_ptr[file])) {
+                //tengo que hacer byte stuffing
                 //vi un punto al inicio de una linea nueva
                 write_ptr[write++] = '.'; //agrego un punto al principio
             }
@@ -909,6 +954,7 @@ int retr_action(pop3* state){
         if(try_write("\r\n.\r\n", &(state->info_write_buff)) == TRY_PENDING){
             return WRITING_RESPONSE;
         }
+        parser_reset(state->byte_stuffing_parser);
         reset_structures(state);
         state->finished = true;
     }
@@ -985,7 +1031,7 @@ int dele_action(pop3* state){
     //TODO: ver el caso donde no se puede convertir
     long index = strtol(state->arg, NULL,10);
     //REvisamos si se puede eliminar
-    if( index < state->emails_count &&  index>=0 &&  !state->emails[index-1].deleted){
+    if( index <= state->emails_count &&  index>0 &&  !state->emails[index-1].deleted){
         state->emails[index-1].deleted = true;
         msj_ret = OK_MESSSAGE;
     }
@@ -1038,6 +1084,7 @@ int quit_action(pop3* state){
             unlinkat(dir_fd,state->emails[i].name,0);
         }
     }
+    state->pop3_protocol_state = AUTHORIZATION;
     close(dir_fd);
     //reinicio el estado
     reset_structures(state);

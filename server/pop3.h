@@ -1,3 +1,5 @@
+#ifndef __POP3_H__
+#define __POP3_H__
 
 typedef struct pop3 pop3;
 
@@ -10,3 +12,5 @@ void pop3_read(struct selector_key* key);
 void pop3_write(struct selector_key* key);
 void pop3_passive_accept(struct selector_key* key);
 void pop3_close(struct selector_key* key);
+
+#endif

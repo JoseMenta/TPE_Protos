@@ -37,7 +37,6 @@ int main(int argc, const char* argv[]) {
     // No queremos que se haga buffering de la salida estandar (que se envíe al recibir un \n), sino que se envíe inmediatamente
     setvbuf(stdout, NULL, _IONBF, 0);
     // Por defecto, el servidor escucha en el puerto que se pasa pero por defecto es el 1100
-    //TODO: Cambiar a 110 para la entrega
     unsigned port = pop3_args->pop3_port;
 
     //No tenemos nada que leer de entrada estandar
@@ -55,15 +54,27 @@ int main(int argc, const char* argv[]) {
     addr.sin_addr.s_addr = htonl(INADDR_ANY);   // Todas las interfaces (escucha por cualquier IP)
     addr.sin_port        = htons(port);         // Server port
 
+    struct sockaddr_in6 addr_6;
+    memset(&addr_6, 0, sizeof(addr_6));
+    addr_6.sin6_family = AF_INET6;
+    addr_6.sin6_addr = in6addr_any;
+    addr_6.sin6_port = htons(port);
+
     //AF_INET -> indica que usa IPV4
     //SOCK_STREAM -> flujo multidireccional de datos confiable
     //IPPROTO_TCP -> indica que va a usar TCP para lograr lo anterior
     //Devuelve el fd del socket (pasivo)
     const int server = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    const int server_6 = socket(AF_INET6,SOCK_STREAM,IPPROTO_TCP);
 
     //Si hubo algun error al abrir el socket
     if(server < 0) {
-        err_msg = "unable to create socket";
+        err_msg = "unable to create socket for ipv4";
+        goto finally;
+    }
+
+    if(server_6 < 0) {
+        err_msg = "unable to create socket for ipv6";
         goto finally;
     }
 
@@ -75,18 +86,31 @@ int main(int argc, const char* argv[]) {
     //SO_REUSEADDR -> deja que otro use el puerto inmediatamente cuando deja de usarlo (sirve por si se reinicia)
     //con el 1, lo mandamos como "habilitado" (recibe un array de opciones)
     setsockopt(server, SOL_SOCKET, SO_REUSEADDR, &(int){ 1 }, sizeof(int));
+    //TODO: revisar, deberia hacer que solo acepte IPV6 y con eso poder usar el mismo puerto
+    setsockopt(server_6, IPPROTO_IPV6, IPV6_V6ONLY, &(int){ 1 }, sizeof(int));
+    setsockopt(server_6, SOL_SOCKET, SO_REUSEADDR, &(int){ 1 }, sizeof(int));
 
     //asigna la direccion IP y el puerto al fd server
     //si retorna negativo falla
     if(bind(server, (struct sockaddr*) &addr, sizeof(addr)) < 0) {
-        err_msg = "unable to bind socket";
+        err_msg = "unable to bind socket for ipv4";
+        goto finally;
+    }
+
+    if(bind(server_6, (struct sockaddr*) &addr_6, sizeof(addr_6)) < 0) {
+        err_msg = "unable to bind socket for ipv6";
         goto finally;
     }
 
     //Marca al socket server como un socket pasivo
     //Si hay mas de MAX_PENDING_CONNECTIONS conexiones en la lista de espera, va a empezar a rechazar algunas 
     if (listen(server, MAX_PENDING_CONNECTIONS) < 0) {
-        err_msg = "unable to listen";
+        err_msg = "unable to listen socket ipv4";
+        goto finally;
+    }
+
+    if (listen(server_6, MAX_PENDING_CONNECTIONS) < 0) {
+        err_msg = "unable to listen socket ipv6";
         goto finally;
     }
 
@@ -103,7 +127,12 @@ int main(int argc, const char* argv[]) {
 
     //agrega el flag de O_NONBLOCK a los flags del server para que usarlo sea no bloqueante 
     if(selector_fd_set_nio(server) == -1) {
-        err_msg = "getting server socket flags";
+        err_msg = "getting server socket flags for ipv4";
+        goto finally;
+    }
+
+    if(selector_fd_set_nio(server_6) == -1) {
+        err_msg = "getting server socket flags for ipv6";
         goto finally;
     }
 
@@ -134,7 +163,7 @@ int main(int argc, const char* argv[]) {
     }
 
     //TODO: cambiar para nuestros handlers
-    const struct fd_handler socksv5 = {
+    const struct fd_handler pop3_handler = {
         .handle_read       = pop3_passive_accept,
         .handle_write      = NULL,
         .handle_close      = NULL, // nada que liberar
@@ -142,10 +171,17 @@ int main(int argc, const char* argv[]) {
 
     //Registra al fd del server, suscribiendolo para la lectura
     //Como no necesita un dato auxiliar para los handlers, pasa NULL
-    ss = selector_register(selector, server, &socksv5,
+    ss = selector_register(selector, server, &pop3_handler,
                                               OP_READ, pop3_args);
     if(ss != SELECTOR_SUCCESS) {
-        err_msg = "registering fd";
+        err_msg = "registering fd for ipv4";
+        goto finally;
+    }
+
+    ss = selector_register(selector, server_6, &pop3_handler,
+                           OP_READ, pop3_args);
+    if(ss != SELECTOR_SUCCESS) {
+        err_msg = "registering fd for ipv6";
         goto finally;
     }
 
@@ -194,8 +230,10 @@ int main(int argc, const char* argv[]) {
     if(server >= 0) {
         close(server);
     }
-    free(pop3_args->maildir_path);
-    usersADT_destroy(pop3_args->users);
-    free(pop3_args); //sabemos que fue reservado porque si no ni siquiera llegabamos aca
+
+    if(server_6 >= 0){
+        close(server_6);
+    }
+
     return ret;
 }

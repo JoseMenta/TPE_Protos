@@ -6,7 +6,7 @@
 
 #define DEFAULT_POP3_PORT 1100
 #define DEFAULT_POP3_CONFIG_PORT 1101
-#define DEFAULT_MAILDIR_PATH "/var/mail"
+#define DEFAULT_MAILDIR_PATH "/var/mail/"
 #define MAX_USERS 500
 
 

@@ -13,6 +13,7 @@
 #include "selector.h"
 #include "pop3.h"
 #include "args.h"
+#include "logging/logger.h"
 
 #define MAX_PENDING_CONNECTIONS 20
 #define INITIAL_FDS 1024
@@ -147,6 +148,11 @@ int main(int argc, const char* argv[]) {
         err_msg = "registering fd";
         goto finally;
     }
+
+    // Null para que solo imprima al archivo, se puede poner stdout para debuggear mas facil
+    loggerInit(selector, "", NULL);
+    loggerSetLevel(LOG_INFO);
+    log(LOG_INFO, "Logging started");
 
     for(;!done;) {
         err_msg = NULL;

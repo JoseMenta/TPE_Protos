@@ -25,6 +25,7 @@
 #define PASS_VALID_MESSAGE "+OK\r\n"
 #define PASS_INVALID_MESSAGE "INVALID PASS\r\n"
 #define OK_MESSSAGE "+OK\r\n"
+#define USER_LOGGED "-ERR USER LOGGED\r\n"
 #define ERROR_MESSSAGE "-ERR\r\n"
 #define ERROR_COMMAND_MESSAGE "-ERR INVALID COMMAND\r\n"
 #define ERROR_RETR_MESSAGE "INVALID MESSEGE NUMBER\r\n"
@@ -114,6 +115,7 @@ struct pop3{
     char* path_to_user_maildir;
     int references;
     struct pop3args* pop3_args;
+    user_t * user_s;
     char * user;
     union{
         struct authorization authorization;
@@ -295,7 +297,7 @@ void pop3_passive_accept(struct selector_key* key) {
     struct sockaddr_storage address;
     socklen_t address_len = sizeof(address);
     // Se acepta la conexion entrante, se cargan los datos en el socket activo y se devuelve el fd del socket activo
-    // Este fd será tanto para leer como para escribir en el socket activo
+    // Este fd será tanto para lfeer como para escribir en el socket activo
     const int client_fd = accept(key->fd, (struct sockaddr *) &address, &address_len);
     printf("Tenemos el fd para la conexion\n");
     //Si tuvimos un error al crear el socket activo o no lo pudimos hacer no bloqueante
@@ -611,6 +613,7 @@ unsigned int write_response(struct selector_key* key){
 
 void finish_connection(const unsigned state, struct selector_key *key){
     pop3 * data = GET_POP3(key);
+    data->user_s->logged=false;
     if(data->pop3_protocol_state == TRANSACTION && data->state_data.transaction.file_opened){
         //Cierro el archivo, lo saco del selector
         if(selector_unregister_fd(key->s, data->state_data.transaction.file_fd) != SELECTOR_SUCCESS){
@@ -708,6 +711,7 @@ int user_action(pop3* state){
         if(strcmp(state->arg, state->pop3_args->users->users_array[i].name) == 0){
             state->state_data.authorization.user = state->pop3_args->users->users_array[i].name;
             state->state_data.authorization.pass = state->pop3_args->users->users_array[i].pass;
+            state->user_s = state->pop3_args->users->users_array + i;
             msj = USER_VALID_MESSAGE;
         }
     }
@@ -723,20 +727,24 @@ int user_action(pop3* state){
 int pass_action(pop3* state){
     char * msj = PASS_INVALID_MESSAGE;
     if(state->state_data.authorization.pass != NULL && strcmp(state->arg, state->state_data.authorization.pass) == 0){
-        msj = PASS_VALID_MESSAGE;
-        state->user= state->state_data.authorization.user;
-        state->pop3_protocol_state = TRANSACTION;
-        state->path_to_user_maildir = usersADT_get_user_mail_path(state->pop3_args->users,state->pop3_args->maildir_path, state->state_data.authorization.user);
-        //TODO: Setear el max para el mails con cliente
-        size_t mails_max = 20;
-        state->emails = read_maildir(state->path_to_user_maildir,&mails_max);
-        if(state->emails == NULL){
-            //TODO: ver de imprimir un error y mantener la conexion
-            printf("No hay cosas en el directorio de mails!\n");
-            return FINISHED;
+        if(state->user_s->logged){
+            msj = USER_LOGGED;
+        }else{
+            msj = PASS_VALID_MESSAGE;
+            state->user_s->logged = true;
+            state->pop3_protocol_state = TRANSACTION;
+            state->path_to_user_maildir = usersADT_get_user_mail_path(state->pop3_args->users,state->pop3_args->maildir_path, state->state_data.authorization.user);
+            //TODO: Setear el max para el mails con cliente
+            size_t mails_max = 20;
+            state->emails = read_maildir(state->path_to_user_maildir,&mails_max);
+            if(state->emails == NULL){
+                //TODO: ver de imprimir un error y mantener la conexion
+                printf("No hay cosas en el directorio de mails!\n");
+                return FINISHED;
+            }
+            state->emails_count = mails_max;
+            reset_structures(state);
         }
-        state->emails_count = mails_max;
-        reset_structures(state);
     }
     if(try_write(msj,&(state->info_write_buff)) == TRY_PENDING){
         printf("Intento escribir en el buffer en pass_action y no tengo espacio");
@@ -1072,6 +1080,7 @@ int quit_action(pop3* state){
     if(state->pop3_protocol_state == AUTHORIZATION){
         return FINISHED;//cierro la conexion
     }
+    state->user_s->logged=false;
     //Estamos en transaction
     //tengo que eliminar todos los archivos que marcaron para eliminar
     int dir_fd = open(state->path_to_user_maildir,O_DIRECTORY);

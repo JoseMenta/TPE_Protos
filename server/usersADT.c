@@ -57,6 +57,7 @@ int usersADT_add(usersADT u, const char * user_name, const char * user_pass) {
     }
     u->users_array[u->users_count].name = name;
     u->users_array[u->users_count].pass = pass;
+    u->users_array[u->users_count].logged = false;
     u->users_count++;
     return 0;
 

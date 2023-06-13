@@ -5,13 +5,6 @@
 
 #include "parserADT.h"
 
-typedef struct parserCDT {
-    const struct parser_definition *    def;                    // Automata
-    uint8_t                             state;                  // Current state
-    parser_state                        parser_state;           // Current parser state
-    void *                              data;                   // Parser data
-} parserCDT;
-
 
 parserADT parser_init(const parser_definition * def) {
     parserADT p = calloc(1, sizeof(parserCDT));

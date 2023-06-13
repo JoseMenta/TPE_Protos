@@ -4,6 +4,13 @@
 #include <stdint.h>
 #include "parser_definition/parser_definition.h"
 
+typedef struct parserCDT {
+    const struct parser_definition *    def;                    // Automata
+    uint8_t                             state;                  // Current state
+    parser_state                        parser_state;           // Current parser state
+    void *                              data;                   // Parser data
+} parserCDT;
+
 typedef struct parserCDT * parserADT;
 
 /**

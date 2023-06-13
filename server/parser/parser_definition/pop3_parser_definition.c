@@ -129,23 +129,35 @@ const parser_definition pop3_parser_definition = {
         .destroy      = pop3_parser_destroy
 };
 
-char * get_pop3_cmd(pop3_parser_data * d) {
-    char * copy = calloc(d->cmd_length + 1, sizeof(char));
-    if (copy == NULL) {
-        return NULL;
-    }
-    strncpy(copy, d->cmd, d->cmd_length);
-    return copy;
+void get_pop3_cmd(parserADT p, char* buff, int max) {
+    pop3_parser_data * d = (pop3_parser_data *) p->data;
+    strncpy(buff, d->cmd, max-1);
+    buff[max-1] = '\0';
 }
 
-char * get_pop3_arg(pop3_parser_data * d) {
-    char * copy = calloc(d->arg_length + 1, sizeof(char));
-    if (copy == NULL) {
-        return NULL;
-    }
-    strncpy(copy, d->arg, d->arg_length);
-    return copy;
+void get_pop3_arg(parserADT p, char* buff, int max) {
+    pop3_parser_data * d = (pop3_parser_data *) p->data;
+    strncpy(buff, d->arg, max-1);
+    buff[max-1] = '\0';
 }
+
+//char * get_pop3_cmd(pop3_parser_data * d) {
+//    char * copy = calloc(d->cmd_length + 1, sizeof(char));
+//    if (copy == NULL) {
+//        return NULL;
+//    }
+//    strncpy(copy, d->cmd, d->cmd_length);
+//    return copy;
+//}
+//
+//char * get_pop3_arg(pop3_parser_data * d) {
+//    char * copy = calloc(d->arg_length + 1, sizeof(char));
+//    if (copy == NULL) {
+//        return NULL;
+//    }
+//    strncpy(copy, d->arg, d->arg_length);
+//    return copy;
+//}
 
 // Condiciones
 static bool is_letter(uint8_t c) {

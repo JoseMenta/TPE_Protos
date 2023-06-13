@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include "parser_definition.h"
+#include "../parserADT.h"
 
 #define CMD_LENGTH                  4
 #define ARG_MAX_LENGTH              40
@@ -15,20 +16,15 @@ typedef struct pop3_parser_data {
     uint8_t arg_length;             // Argument length
 } pop3_parser_data;
 
-/**
- * Devuelve una copia del comando POP3
- * Devuelve NULL si no se pudo realizar la copia
- *
- * Se debe liberar la memoria con free
- */
-char * get_pop3_cmd(pop3_parser_data * d);
 
 /**
- * Devuelve una copia del argumento POP3
- * Devuelve NULL si no se pudo realizar la copia
- *
- * Se debe liberar la memoria con free
+ * Coloca en buff el contenido del comando
  */
-char * get_pop3_arg(pop3_parser_data * d);
+void get_pop3_cmd(parserADT p, char* buff, int max);
+
+/**
+ * Coloca en buff el contenido del argumento
+ */
+void get_pop3_arg(parserADT p, char* buff, int max);
 
 #endif

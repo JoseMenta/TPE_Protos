@@ -479,24 +479,29 @@ unsigned int read_request(struct selector_key* key){
         if(parser == PARSER_FINISHED || parser == PARSER_ERROR){
             //avanzamos solo hasta el fin del comando
             buffer_read_adv(&(state->info_read_buff),i+1);
-            pop3_parser_data * parser_data = (pop3_parser_data *) parser_get_data(state->pop3_parser);
-            if (parser_data == NULL) {
-                printf("Error obteniendo los datos del parser\n");
-                return FINISHED;
-            }
-            const char* parser_command = parser_data->cmd;
-            //TODO: chequear bien error
-            if(parser_command == NULL){
-                return FINISHED;
-            }
-            pop3_command command = get_command(parser_command);
+            get_pop3_cmd(state->pop3_parser,state->cmd,MAX_CMD);
+//            pop3_parser_data * parser_data = (pop3_parser_data *) parser_get_data(state->pop3_parser);
+//            if (parser_data == NULL) {
+//                printf("Error obteniendo los datos del parser\n");
+//                return FINISHED;
+//            }
+
+//            const char* parser_command = parser_data->cmd;
+//            TODO: chequear bien error
+//            if(parser_command == NULL){
+//                return FINISHED;
+//            }
+            pop3_command command = get_command(state->cmd);
             state->command = command;
-            state->arg = get_pop3_arg(parser_data);
-            if (state->arg == NULL) {
-                printf("Error obteniendo el argumento del comando\n");
-                return FINISHED;
-            }
-            free((void*)parser_data);
+            get_pop3_arg(state->pop3_parser,state->arg,MAX_ARG);
+//            pop3_command command = get_command(parser_command);
+//            state->command = command;
+//            state->arg = get_pop3_arg(parser_data);
+//            if (state->arg == NULL) {
+//                printf("Error obteniendo el argumento del comando\n");
+//                return FINISHED;
+//            }
+//            free((void*)parser_data);
             if(parser == PARSER_ERROR || command == ERROR_COMMAND || !commands[command].check(state->arg)){
                 printf("No es un comando valido");
                 state->command = ERROR_COMMAND;
@@ -559,24 +564,26 @@ unsigned int write_response(struct selector_key* key){
             if(parser == PARSER_FINISHED || parser == PARSER_ERROR){
                 //avanzamos solo hasta el fin del comando
                 buffer_read_adv(&(state->info_read_buff),i+1);
-                pop3_parser_data * parser_data = (pop3_parser_data *) parser_get_data(state->pop3_parser);
-                if (parser_data == NULL) {
-                    printf("Error obteniendo los datos del parser\n");
-                    return FINISHED;
-                }
-                const char* parser_command = parser_data->cmd;
-                //TODO: chequear bien error
-                if(parser_command == NULL){
-                    return FINISHED;
-                }
-                pop3_command command = get_command(parser_command);
+//                pop3_parser_data * parser_data = (pop3_parser_data *) parser_get_data(state->pop3_parser);
+//                if (parser_data == NULL) {
+//                    printf("Error obteniendo los datos del parser\n");
+//                    return FINISHED;
+//                }
+                get_pop3_cmd(state->pop3_parser,state->cmd,MAX_CMD);
+//                const char* parser_command = parser_data->cmd;
+//                TODO: chequear bien error
+//                if(parser_command == NULL){
+//                    return FINISHED;
+//                }
+                pop3_command command = get_command(state->cmd);
                 state->command = command;
-                state->arg = get_pop3_arg(parser_data);
-                if (state->arg == NULL) {
-                    printf("Error obteniendo el argumento del comando\n");
-                    return FINISHED;
-                }
-                free((void*)parser_data);
+                get_pop3_arg(state->pop3_parser,state->arg,MAX_ARG);
+//                state->arg = get_pop3_arg(parser_data);
+//                if (state->arg == NULL) {
+//                    printf("Error obteniendo el argumento del comando\n");
+//                    return FINISHED;
+//                }
+//                free((void*)parser_data);
                 if(parser == PARSER_ERROR || command == ERROR_COMMAND || !commands[command].check(state->arg)){
                     printf("No es un comando valido");
                     state->command = ERROR_COMMAND;
@@ -716,7 +723,6 @@ int user_action(pop3* state){
 int pass_action(pop3* state){
     char * msj = PASS_INVALID_MESSAGE;
     if(state->state_data.authorization.pass != NULL && strcmp(state->arg, state->state_data.authorization.pass) == 0){
-        if()
         msj = PASS_VALID_MESSAGE;
         state->user= state->state_data.authorization.user;
         state->pop3_protocol_state = TRANSACTION;
@@ -1025,7 +1031,7 @@ int dele_action(pop3* state){
     //TODO: ver el caso donde no se puede convertir
     long index = strtol(state->arg, NULL,10);
     //REvisamos si se puede eliminar
-    if( index < state->emails_count &&  index>=0 &&  !state->emails[index-1].deleted){
+    if( index <= state->emails_count &&  index>0 &&  !state->emails[index-1].deleted){
         state->emails[index-1].deleted = true;
         msj_ret = OK_MESSSAGE;
     }
@@ -1078,6 +1084,7 @@ int quit_action(pop3* state){
             unlinkat(dir_fd,state->emails[i].name,0);
         }
     }
+    state->pop3_protocol_state = AUTHORIZATION;
     close(dir_fd);
     //reinicio el estado
     reset_structures(state);

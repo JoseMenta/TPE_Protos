@@ -4,7 +4,7 @@
 typedef struct pop3 pop3;
 
 #define GET_POP3(key) ((pop3*) (key)->data)
-#define BUFFER_SIZE 1024
+#define BUFFER_SIZE 4098
 
 
 //Funciones llamadas por selector

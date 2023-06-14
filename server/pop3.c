@@ -19,7 +19,7 @@
 
 #define MAX_CMD 5
 #define MAX_ARG 41
-#define WELCOME_MESSAGE "POP3 server\r\n"
+#define WELCOME_MESSAGE "+OK POP3 server\r\n"
 #define USER_INVALID_MESSAGE "-ERR INVALID USER\r\n"
 #define USER_VALID_MESSAGE "+OK send PASS\r\n"
 #define PASS_VALID_MESSAGE "+OK\r\n"
@@ -34,6 +34,9 @@
 #define ERROR_INDEX_MESSAGE "-ERR no such message\r\n"
 #define QUIT_MESSAGE "+OK Logging out\r\n"
 #define CAPA_MESSAGE "+OK Capability list follows\r\nUSER\r\nPIPELINING\r\n.\r\n"
+#define NO_MAILDIR_MESSAGE "-ERR Could not open maildir\r\n"
+#define UNKNOWN_ERROR_MESSAGE "-ERR Closing connection\r\n"
+
 //Esto es lo que vamos a pasar en void* data del selector
 //Vamos a agregar lo que necesitemos, como un array con todos los mails que tiene el usuario
 
@@ -97,6 +100,7 @@ typedef enum{
 struct pop3{
     int connection_fd;
     pop3_command command;
+    const char* final_error_message;
     char  arg[MAX_ARG];
     char  cmd[MAX_CMD];
     struct state_machine stm;
@@ -167,6 +171,7 @@ unsigned int read_request(struct selector_key* key);
 unsigned int write_response(struct selector_key* key);
 unsigned int process_response(struct  selector_key* key);
 void finish_connection(const unsigned state, struct selector_key *key);
+unsigned int finish_error(struct  selector_key* key);
 void process_open_file(const unsigned state, struct selector_key *key);
 //funcion para reiniciar estructuras asociadas a un estado del protocolo
 void reset_structures(pop3* state);
@@ -273,6 +278,7 @@ static const struct state_definition state_handlers[] ={
     },
     {
         .state = ERROR,
+        .on_write_ready = finish_error
     }
 
 };
@@ -289,7 +295,6 @@ static const struct fd_handler handler = {
  * Funcion utilizada en el socket pasivo para aceptar una nueva conexion y agregarla al selector
  */
 void pop3_passive_accept(struct selector_key* key) {
-    printf("Se esta aceptando la conexion\n");
     //Vamos a aceptar la conexion entrante
     pop3 *state = NULL;
     // Se crea la estructura del socket
@@ -297,32 +302,24 @@ void pop3_passive_accept(struct selector_key* key) {
     struct sockaddr_storage address;
     socklen_t address_len = sizeof(address);
     // Se acepta la conexion entrante, se cargan los datos en el socket activo y se devuelve el fd del socket activo
-    // Este fd será tanto para lfeer como para escribir en el socket activo
+    // Este fd será tanto para leer como para escribir en el socket activo
     const int client_fd = accept(key->fd, (struct sockaddr *) &address, &address_len);
-    printf("Tenemos el fd para la conexion\n");
     //Si tuvimos un error al crear el socket activo o no lo pudimos hacer no bloqueante
     if (client_fd == -1){
-        printf("El fd es: %d\n", key->fd);
-        printf("El errno es: %s\n", strerror(errno));
-        printf("fallo el accept client\n");
         goto fail;
     }
     if(selector_fd_set_nio(client_fd) == -1) {
-        printf("Fallo el flag no bloqueante");
         goto fail;
     }
 
     if((state = pop3_create(key->data))==NULL){
-        printf("Fallo el create");
         goto fail;
     }
     state->connection_fd = client_fd;
     //registramos en el selector al nuevo socket, y nos interesamos en escribir para mandarle el mensaje de bienvenida
     if(selector_register(key->s,client_fd,&handler,OP_WRITE,state)!= SELECTOR_SUCCESS){
-        printf("Fallo el registro del socket");
         goto fail;
     }
-    printf("Registramos al fd en el selector\n");
     //Si tenemos metricas, cambiarlas aca
 
     return;
@@ -345,7 +342,6 @@ pop3* pop3_create(void * data){
     extern const parser_definition byte_stuffing_parser_definition;
     pop3* ans = calloc(1,sizeof(pop3));
     if(ans == NULL || errno == ENOMEM){ //errno por optimismo Linux
-        printf("Error al reservar memoria para el estado");
         return NULL;
     }
     // Se inicializa la maquina de estados para el cliente
@@ -367,7 +363,6 @@ pop3* pop3_create(void * data){
     strncpy((char*)ptr,WELCOME_MESSAGE,max);
     buffer_write_adv(&(ans->info_write_buff),strlen(WELCOME_MESSAGE));
 
-    printf("Se termina de inicializar la estructura\n");
     return ans;
 }
 
@@ -396,23 +391,19 @@ void pop3_destroy(pop3* state){
  * Funcion llamada por el selctor cuando puede leer de un fd
  */
 void pop3_read(struct selector_key* key){
-    printf("Intenta leer\n");
     // Se obtiene la maquina de estados del cliente asociado al key
     struct state_machine* stm = &(GET_POP3(key)->stm);
     // Se ejecuta la función de lectura para el estado actual de la maquina de estados
     const pop3_state st = stm_handler_read(stm,key);
-    printf("Termina con el estado %d\n",st);
 }
 /*
  * Funcion llamada por el selector cuando puede escribir en un fd
  */
 void pop3_write(struct selector_key* key){
-    printf("Intenta escribir\n");
     // Se obtiene la maquina de estados del cliente asociado al key
     struct state_machine* stm = &(GET_POP3(key)->stm);
     // Se ejecuta la función de lectura para el estado actual de la maquina de estados
     const pop3_state st = stm_handler_write(stm,key);
-    printf("Termina con el estado %d\n",st);
 }
 /*
  * Funcion llamada por el selector cuando se llama a selector_unregister_fd (es decir, cuando se saca al fd del selector)
@@ -441,10 +432,9 @@ unsigned hello_write(struct selector_key* key){
     pop3* state = GET_POP3(key);
     size_t  max = 0;
     uint8_t* ptr = buffer_read_ptr(&(state->info_write_buff),&max);
-    ssize_t sent_count = send(key->fd,ptr,max,0);
+    ssize_t sent_count = send(key->fd,ptr,max,MSG_NOSIGNAL);
 
     if(sent_count == -1){
-        printf("Error al escribir en el socket");
         return FINISHED;
     }
     buffer_read_adv(&(state->info_write_buff),sent_count);
@@ -454,14 +444,12 @@ unsigned hello_write(struct selector_key* key){
     }
     //Si ya no hay mas para escribir y termine con el mensaje de bienvenida
     if(selector_set_interest(key->s,key->fd,OP_READ) != SELECTOR_SUCCESS){
-        printf("Error cambiando el interes del socket para leer\n");
         return FINISHED;
     }
     return READING_REQUEST;
 }
 
 unsigned int read_request(struct selector_key* key){
-    printf("Entra a leer el request!!\n");
     pop3* state = GET_POP3(key);
     //Guardamos lo que leemos del socket en el buffer de entrada
     size_t max = 0;
@@ -469,7 +457,6 @@ unsigned int read_request(struct selector_key* key){
     ssize_t read_count = recv(key->fd, ptr, max, 0);
 
     if(read_count<=0){
-        printf("Error leyendo del socket\n");
         return FINISHED;
     }
     //Avanzamos la escritura en el buffer
@@ -505,17 +492,14 @@ unsigned int read_request(struct selector_key* key){
 //            }
 //            free((void*)parser_data);
             if(parser == PARSER_ERROR || command == ERROR_COMMAND || !commands[command].check(state->arg)){
-                printf("No es un comando valido");
                 state->command = ERROR_COMMAND;
             }
             if(!check_command_for_protocol_state(state->pop3_protocol_state, command)){
-                printf("Comando no permitido\n");
                 state->command = ERROR_COMMAND;
             }
             parser_reset(state->pop3_parser);
             //Vamos a procesar la respuesta
             if(selector_set_interest(key->s,key->fd,OP_WRITE) != SELECTOR_SUCCESS){
-                printf("Error cambiando el interes del socket para escribir\n");
                 return FINISHED;
             }
             return WRITING_RESPONSE; //vamos a escribir la respuesta
@@ -523,11 +507,9 @@ unsigned int read_request(struct selector_key* key){
     }
     //Avanzamos en el buffer, leimos lo que tenia
     buffer_read_adv(&(state->info_read_buff),max);
-    printf("Ya movi el index del buffer para escritura\n");
     return READING_REQUEST; //vamos a seguir leyendo el request
 }
 unsigned int write_response(struct selector_key* key){
-    printf("Entra a escribir el response!!\n");
     pop3* state = GET_POP3(key);
     //ejecutamos la funcion para generar la respuesta, que va a setear a state->finished como corresponda
     command current_command = commands[state->command];
@@ -535,10 +517,12 @@ unsigned int write_response(struct selector_key* key){
     if(!state->finished) {
         unsigned int ret_state = current_command.action(state); //ejecutamos la accion
         //Si tengo que irme de este estado (para leer del archivo) me voy
+        if(ret_state == ERROR){ //me mantengo en escritura
+            return ERROR;
+        }
         if(ret_state!=WRITING_RESPONSE){
             //Dejo de suscribirme en donde estoy, tengo que ir a otro lado
             if(selector_set_interest(key->s,key->fd,OP_NOOP) != SELECTOR_SUCCESS){
-                printf("Error cambiando el interes del socket para leer\n");
                 return FINISHED;
             }
             return ret_state;
@@ -547,14 +531,12 @@ unsigned int write_response(struct selector_key* key){
     //Escribimos lo que tenemos en el buffer de salida al socket
     size_t  max = 0;
     uint8_t* ptr = buffer_read_ptr(&(state->info_write_buff),&max);
-    ssize_t sent_count = send(key->fd,ptr,max,0);
+    ssize_t sent_count = send(key->fd,ptr,max,MSG_NOSIGNAL);
 
     if(sent_count == -1){
-        printf("Error al escribir en el socket");
         return FINISHED;
     }
     buffer_read_adv(&(state->info_write_buff),sent_count);
-    printf("Avanzamos el puntero de lectura en el buffer de escritura\n");
     //Si ya no hay mas para escribir y el comando termino de generar la respuesta
     if(!buffer_can_read(&(state->info_write_buff)) && state->finished){
         state->finished = false;
@@ -587,11 +569,9 @@ unsigned int write_response(struct selector_key* key){
 //                }
 //                free((void*)parser_data);
                 if(parser == PARSER_ERROR || command == ERROR_COMMAND || !commands[command].check(state->arg)){
-                    printf("No es un comando valido");
                     state->command = ERROR_COMMAND;
                 }
                 if(!check_command_for_protocol_state(state->pop3_protocol_state, command)){
-                    printf("Comando no permitido\n");
                     state->command = ERROR_COMMAND;
                 }
                 parser_reset(state->pop3_parser);
@@ -601,10 +581,8 @@ unsigned int write_response(struct selector_key* key){
         buffer_read_adv(&(state->info_read_buff),max);
         //No hay un comando completo, volvemos a leer
         if(selector_set_interest(key->s,key->fd,OP_READ) != SELECTOR_SUCCESS){
-            printf("Error cambiando el interes del socket para leer\n");
             return FINISHED;
         }
-        printf("Cambio al interes de lectura\n");
         return READING_REQUEST;
     }
     //Va a volver a donde esta, tiene que seguir escribiendo
@@ -613,19 +591,21 @@ unsigned int write_response(struct selector_key* key){
 
 void finish_connection(const unsigned state, struct selector_key *key){
     pop3 * data = GET_POP3(key);
-    data->user_s->logged=false;
+    if(data->pop3_protocol_state == TRANSACTION){
+        data->user_s->logged=false;
+    }
     if(data->pop3_protocol_state == TRANSACTION && data->state_data.transaction.file_opened){
         //Cierro el archivo, lo saco del selector
         if(selector_unregister_fd(key->s, data->state_data.transaction.file_fd) != SELECTOR_SUCCESS){
             abort();
         }
     }
+
     if (selector_unregister_fd(key->s, key->fd) != SELECTOR_SUCCESS) {
         abort();
     }
     //con selector_unregister_fd, se va a llamar a la funcion pop3_close
 }
-
 /*
  * --------------------------------------------------------------------------------------
  * Funciones auxiliares para los comandos (struct command)
@@ -648,23 +628,15 @@ bool check_command_for_protocol_state(protocol_state pop3_protocol_state, pop3_c
 }
 
 bool have_argument(const char* arg){
-    printf("Entro en la funcion de have_argument con el argumento '%s'\n", arg);
     bool aux = strlen(arg)!=0;
-    if(aux){
-        printf("true");
-    }else{
-        printf("false");
-    }
-    return aux;
+    return strlen(arg)!=0;
 }
 
 bool might_argument(const char* arg){
-    printf("Entro en la funcion de might_argument con el argumento '%s'\n", arg);
     return true;
 }
 
 bool not_argument(const char* arg){
-    printf("Entro a la funcion not_argument con el argumento '%s'\n", arg);
     return arg == NULL || strlen(arg) == 0;
 }
 
@@ -702,6 +674,32 @@ try_state try_write(const char* str, buffer* buff){
     return TRY_DONE;
 }
 
+unsigned finish_error(struct  selector_key* key){
+    //Si llego aca tengo que estar en escritura
+    pop3* state = GET_POP3(key);
+    if(state->final_error_message == NULL){
+        state->final_error_message = UNKNOWN_ERROR_MESSAGE;
+    }
+    if(try_write(state->final_error_message,&(state->info_write_buff)) != TRY_DONE){
+        return ERROR; //espero a poder mandar el mensaje de error
+    }
+
+    //Escribimos lo que tenemos en el buffer de salida al socket
+    size_t  max = 0;
+    uint8_t* ptr = buffer_read_ptr(&(state->info_write_buff),&max);
+    ssize_t sent_count = send(key->fd,ptr,max,MSG_NOSIGNAL);
+
+    if(sent_count == -1){
+        return FINISHED; //para que vaya a .on_departure, nunca deberia llegar a hello
+    }
+    buffer_read_adv(&(state->info_write_buff),sent_count);
+    //Si ya no hay mas para escribir y el comando termino de generar la respuesta
+    if(!buffer_can_read(&(state->info_write_buff))){
+        return FINISHED;
+    }
+    return ERROR;//vuelvo a intentar
+}
+
 /*
  * Acciones asociadas a cada comando de pop3
  */
@@ -717,7 +715,6 @@ int user_action(pop3* state){
     }
     if(try_write(msj,&(state->info_write_buff)) == TRY_PENDING){
         //No deberia pasar nunca, si llego aca es porque el buffer de salida esta vacio
-        printf("En user_action se intenta escribir al buffer y no se puede\n");
         return FINISHED;
     }
     state->finished = true;
@@ -739,15 +736,14 @@ int pass_action(pop3* state){
             state->emails = read_maildir(state->path_to_user_maildir,&mails_max);
             if(state->emails == NULL){
                 //TODO: ver de imprimir un error y mantener la conexion
-                printf("No hay cosas en el directorio de mails!\n");
-                return FINISHED;
+                state->final_error_message = NO_MAILDIR_MESSAGE;
+                return ERROR;
             }
             state->emails_count = mails_max;
             reset_structures(state);
         }
     }
     if(try_write(msj,&(state->info_write_buff)) == TRY_PENDING){
-        printf("Intento escribir en el buffer en pass_action y no tengo espacio");
         return FINISHED;
     }
     state->finished = true;
@@ -769,7 +765,6 @@ int stat_action(pop3* state){
     //TODO: no contar nos eliminados
     snprintf(aux,max_len,"+OK %zu %ld\r\n",state->emails_count,aux_len_emails);
     if(try_write(aux,&(state->info_write_buff)) == TRY_PENDING){
-        printf("Intento escribir en el buffer en stat_action y no tengo espacio\n");
         return FINISHED;
     }
     state->finished = true;
@@ -777,7 +772,6 @@ int stat_action(pop3* state){
 }
 int default_action(pop3* state){
     if(try_write(ERROR_COMMAND_MESSAGE,&(state->info_write_buff)) == TRY_PENDING){
-        printf("Intento escribir en el buffer en default_action y no tengo espacio\n");
         return FINISHED;
     }
     state->finished = true;
@@ -800,12 +794,10 @@ int list_action(pop3* state){
             if(state->state_data.transaction.arg > state->emails_count || state->state_data.transaction.arg <= 0){
                 //Error de indice
                 if(try_write(ERROR_INDEX_MESSAGE,&(state->info_write_buff)) == TRY_PENDING){
-                    printf("Intento escribir la primera linea en list_action y no hay espacio en el buffer\n");
                     return FINISHED;
                 }
             }else if(state->emails[state->state_data.transaction.arg-1].deleted){
                 if(try_write(ERROR_DELETED_MESSAGE,&(state->info_write_buff)) == TRY_PENDING){
-                    printf("Intento escribir la primera linea en list_action y no hay espacio en el buffer\n");
                     return FINISHED;
                 }
             }else {
@@ -815,7 +807,6 @@ int list_action(pop3* state){
                 email send_email = state->emails[state->state_data.transaction.arg - 1];
                 snprintf(aux, message_len, "+OK %ld %ld\r\n", state->state_data.transaction.arg, send_email.size);
                 if (try_write(aux, &(state->info_write_buff)) == TRY_PENDING) {
-                    printf("Intento escribir la primera linea en list_action y no hay espacio en el buffer\n");
                     return FINISHED;
                 }
             }
@@ -828,7 +819,6 @@ int list_action(pop3* state){
             char aux[message_len];
             snprintf(aux,message_len,"+OK %zu messages\r\n", state->emails_count);
             if (try_write(aux, &(state->info_write_buff)) == TRY_PENDING) {
-                printf("Intento escribir la primera linea en list_action y no hay espacio en el buffer\n");
                 return FINISHED;
             }
             state->state_data.transaction.multiline_state = MULTILINE_STATE_MULTILINE;
@@ -892,7 +882,6 @@ int retr_action(pop3* state){
     if(state->state_data.transaction.multiline_state == MULTILINE_STATE_FIRST_LINE){
         if(!state->state_data.transaction.has_arg){
             if(try_write(ERROR_RETR_ARG_MESSEGE, &(state->info_write_buff)) == TRY_PENDING){
-                printf("Intento escribir la primera linea en retr_action y no hay espacio\n");
                 return FINISHED;
             }
             state->finished = true;
@@ -900,7 +889,6 @@ int retr_action(pop3* state){
             return WRITING_RESPONSE;
         }else if(state->state_data.transaction.arg > state->emails_count || state->state_data.transaction.arg <=0){
             if(try_write(ERROR_RETR_MESSAGE, &(state->info_write_buff)) == TRY_PENDING){
-                printf("Intento escribir la primera linea en retr_action y no hay espacio\n");
                 return FINISHED;
             }
             state->finished = true;
@@ -908,7 +896,6 @@ int retr_action(pop3* state){
             return WRITING_RESPONSE;
         }else if(state->emails[state->state_data.transaction.arg-1].deleted){
             if(try_write(ERROR_DELETED_MESSAGE, &(state->info_write_buff)) == TRY_PENDING){
-                printf("Intento escribir la primera linea en retr_action y no hay espacio\n");
                 return FINISHED;
             }
             state->finished = true;
@@ -919,7 +906,6 @@ int retr_action(pop3* state){
             char aux[3+20+6+3];
             snprintf(aux,message_size,"+OK %ld octets\r\n",state->emails[state->state_data.transaction.arg-1].size);
             if(try_write(aux, &(state->info_write_buff)) == TRY_PENDING){
-                printf("Intento escribir la primera linea en retr_action y no hay espacio\n");
                 return FINISHED;
             }
             state->state_data.transaction.multiline_state = MULTILINE_STATE_MULTILINE;
@@ -959,6 +945,7 @@ int retr_action(pop3* state){
     }
     if(state->state_data.transaction.multiline_state == MULTILINE_STATE_END_LINE){
         //podemos no llegar a poder escribir la ultima linea por lo de arriba, entonces probamos
+        //TODO: si lo ultimo que lei es un fin de linea -> no poner el primer \r\n
         if(try_write("\r\n.\r\n", &(state->info_write_buff)) == TRY_PENDING){
             return WRITING_RESPONSE;
         }
@@ -1013,20 +1000,17 @@ unsigned int process_response(struct  selector_key* key){
         state->state_data.transaction.file_ended = true;
     }
     if(read_count<0){
-        printf("Error leyendo del archivo\n");
         return FINISHED;
     }
     //Avanzamos la escritura en el buffer
     buffer_write_adv(&(state->info_file_buff), read_count);
     if(selector_set_interest(key->s,state->connection_fd, OP_WRITE) != SELECTOR_SUCCESS
         || selector_set_interest(key->s,state->state_data.transaction.file_fd,OP_NOOP)!= SELECTOR_SUCCESS){
-        printf("No pude volver a escritura de la respuesta\n");
         return FINISHED;
     }
     if(state->state_data.transaction.file_ended == true){
         //Es la ultima vez que voy a venir al archivo, lo cerramos
         if(selector_unregister_fd(key->s,state->state_data.transaction.file_fd)!= SELECTOR_SUCCESS){
-            printf("Error al sacar al archivo del selector");
             return FINISHED;
         }
     }
@@ -1044,7 +1028,6 @@ int dele_action(pop3* state){
         msj_ret = OK_MESSSAGE;
     }
     if(try_write(msj_ret, &(state->info_write_buff)) == TRY_PENDING){
-        printf("Intento escribir el mensaje en dele_action y el buffer no tiene espacio\n");
         return FINISHED;
     }
     state->finished = true;
@@ -1059,7 +1042,6 @@ int rset_action(pop3* state){
         state->emails[i].deleted = false;
     }
     if(try_write(OK_MESSSAGE, &(state->info_write_buff)) == TRY_PENDING){
-        printf("Intento escribir el mensaje en rset_action y el buffer no tiene espacio\n");
         return FINISHED;
     }
     state->finished = true;
@@ -1067,7 +1049,6 @@ int rset_action(pop3* state){
 }
 int noop_action(pop3* state){
     if(try_write(OK_MESSSAGE, &(state->info_write_buff)) == TRY_PENDING){
-        printf("Intento escribir el mensaje en noop_action y el buffer no tiene espacio\n");
         return FINISHED;
     }
     state->finished = true;
@@ -1077,8 +1058,9 @@ int noop_action(pop3* state){
 
 
 int quit_action(pop3* state){
+    state->final_error_message = QUIT_MESSAGE;
     if(state->pop3_protocol_state == AUTHORIZATION){
-        return FINISHED;//cierro la conexion
+        return ERROR;//cierro la conexion
     }
     state->user_s->logged=false;
     //Estamos en transaction
@@ -1095,19 +1077,18 @@ int quit_action(pop3* state){
     }
     state->pop3_protocol_state = AUTHORIZATION;
     close(dir_fd);
+    return ERROR;
     //reinicio el estado
-    reset_structures(state);
-    if(try_write(QUIT_MESSAGE, &(state->info_write_buff)) == TRY_PENDING){
-        printf("Intento escribir el mensaje en noop_action y el buffer no tiene espacio\n");
-        return FINISHED;
-    }
-    state->finished = true;
-    return WRITING_RESPONSE;
+//    reset_structures(state);
+//    if(try_write(QUIT_MESSAGE, &(state->info_write_buff)) == TRY_PENDING){
+//        return FINISHED;
+//    }
+//    state->finished = true;
+//    return WRITING_RESPONSE;
 }
 
 int capa_action(pop3* state){
     if(try_write(CAPA_MESSAGE, &(state->info_write_buff)) == TRY_PENDING){
-        printf("Intento escribir el mensaje en noop_action y el buffer no tiene espacio\n");
         return FINISHED;
     }
     state->finished = true;

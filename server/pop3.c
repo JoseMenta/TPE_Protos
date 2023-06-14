@@ -16,6 +16,7 @@
 #include "./parser/parser_definition/pop3_parser_definition.h"
 #include "./parser/parser_definition/byte_stuffing_parser_definition.h"
 #include "args.h"
+#include "logging/logger.h"
 
 #define MAX_CMD 5
 #define MAX_ARG 41
@@ -306,9 +307,11 @@ void pop3_passive_accept(struct selector_key* key) {
     const int client_fd = accept(key->fd, (struct sockaddr *) &address, &address_len);
     //Si tuvimos un error al crear el socket activo o no lo pudimos hacer no bloqueante
     if (client_fd == -1){
+        log(LOG_ERROR, "Error creating active socker for user");
         goto fail;
     }
     if(selector_fd_set_nio(client_fd) == -1) {
+        logf(LOG_ERROR, "Error setting not block for user %d",client_fd);
         goto fail;
     }
 
@@ -316,6 +319,7 @@ void pop3_passive_accept(struct selector_key* key) {
         goto fail;
     }
     state->connection_fd = client_fd;
+    logf(LOG_INFO, "registering client with fd %d", client_fd);
     //registramos en el selector al nuevo socket, y nos interesamos en escribir para mandarle el mensaje de bienvenida
     if(selector_register(key->s,client_fd,&handler,OP_WRITE,state)!= SELECTOR_SUCCESS){
         goto fail;
@@ -338,6 +342,7 @@ fail:
  * Funcion utilizada para crear la estructura pop3 que mantiene el estado de una conexion
  */
 pop3* pop3_create(void * data){
+    log(LOG_DEBUG, "Initializing pop3");
     extern const parser_definition pop3_parser_definition;
     extern const parser_definition byte_stuffing_parser_definition;
     pop3* ans = calloc(1,sizeof(pop3));
@@ -370,6 +375,7 @@ pop3* pop3_create(void * data){
  * Funcion para liberar memoria asociada a la estructura pop3
  */
 void pop3_destroy(pop3* state){
+    log(LOG_DEBUG, "Destroying pop3");
     if(state == NULL){
         return;
     }
@@ -481,6 +487,7 @@ unsigned int read_request(struct selector_key* key){
 //                return FINISHED;
 //            }
             pop3_command command = get_command(state->cmd);
+            
             state->command = command;
             get_pop3_arg(state->pop3_parser,state->arg,MAX_ARG);
 //            pop3_command command = get_command(parser_command);

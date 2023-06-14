@@ -9,7 +9,7 @@
 #include <unistd.h>
 
 #define DEFAULT_LOG_FOLDER "./log"
-#define DEFAULT_LOG_FILE (DEFAULT_LOG_FOLDER "/%04d-%02d-%02d.log")
+#define DEFAULT_LOG_FILE (DEFAULT_LOG_FOLDER "/%04d-%02d-%02d_%02d-%02d-%02d.log")
 #define DEFAULT_LOG_FILE_MAXSTRLEN 48
 
 /* Tamaño minimo para el buffer */
@@ -138,7 +138,7 @@ static int tryOpenLogfile(const char* logFile, struct tm tm) {
 
     // Si es "", le ponemos un default (YYYY-MM-DD.log), si ya existe se sigue loggeando ahi
     if (logFile[0] == '\0') {
-        snprintf(logfilebuffer, DEFAULT_LOG_FILE_MAXSTRLEN, DEFAULT_LOG_FILE,tm.tm_year + 1900,  tm.tm_mday, tm.tm_mon + 1);
+        snprintf(logfilebuffer, DEFAULT_LOG_FILE_MAXSTRLEN, DEFAULT_LOG_FILE,tm.tm_year + 1900,  tm.tm_mday, tm.tm_mon + 1, tm.tm_hour, tm.tm_min, tm.tm_min);
 
 
         logFile = logfilebuffer;

@@ -10,3 +10,4 @@ bin/*
 .vscode
 popserver
 popadmin
+log

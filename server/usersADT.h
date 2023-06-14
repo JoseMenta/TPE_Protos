@@ -9,6 +9,7 @@
 typedef struct{
     char *name;
     char *pass;
+    bool logged;
 } user_t;
 
 struct usersCDT {

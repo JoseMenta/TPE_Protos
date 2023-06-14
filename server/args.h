@@ -7,6 +7,7 @@
 #define DEFAULT_POP3_PORT 1100
 #define DEFAULT_POP3_CONFIG_PORT 1101
 #define DEFAULT_MAILDIR_PATH "/var/mail/"
+#define DEFAULT_MAX_MAILS 20
 #define MAX_USERS 500
 
 
@@ -14,7 +15,8 @@ struct pop3args {
     unsigned short  pop3_port;
     unsigned short  pop3_config_port;
     char *          maildir_path;
-    usersADT         users;
+    usersADT        users;
+    unsigned long   max_mails;
 };
 
 /**

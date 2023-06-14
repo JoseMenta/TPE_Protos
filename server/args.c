@@ -25,6 +25,19 @@ port(const char *s) {
      return (unsigned short)sl;
 }
 
+static unsigned long
+max_mails(const char *s) {
+    char *end     = 0;
+    const long sl = strtol(s, &end, 10);
+
+    if (end == s|| '\0' != *end
+        || ((LONG_MIN == sl || LONG_MAX == sl) && ERANGE == errno)) {
+        fprintf(stderr, "port should in in the range of 1-65536: %s\n", s);
+        exit(1);
+    }
+    return sl;
+}
+
 static char * path(const char * path){
     unsigned int path_len = strlen(path);
     char * ret_str = calloc(path_len+1,sizeof (char));
@@ -63,6 +76,7 @@ usage(const char *progname) {
         "   -d <path>        Path del directorio Maildir.\n"
         "   -u <name>:<pass> Usuario y contraseña de usuario POP3. Indicarlo para cada usuario que se desea agregar\n"
         "   -v               Imprime información sobre la versión.\n"
+        "   -m <max>         La cantidad maxima de mails que lee el servidor de maildir para un usuario\n"
         "\n",
         progname);
 }
@@ -74,13 +88,14 @@ parse_args(const int argc, const char **argv, struct pop3args *args) {
     args->pop3_port = DEFAULT_POP3_PORT;
     args->pop3_config_port = DEFAULT_POP3_CONFIG_PORT;
     args->maildir_path = DEFAULT_MAILDIR_PATH;
+    args->max_mails = DEFAULT_MAX_MAILS;
     args->users = usersADT_init();
 
     int c;
     int nusers = 0;
 
     while (true) {
-        c = getopt(argc, (char *const *) argv, "hp:P:u:vd:");
+        c = getopt(argc, (char *const *) argv, "hp:P:u:vd:m:");
         if (c == -1) {
             break;
         }
@@ -111,6 +126,9 @@ parse_args(const int argc, const char **argv, struct pop3args *args) {
                 exit(0);
             case 'd':
                 args->maildir_path = path(optarg);
+                break;
+            case 'm':
+                args->max_mails = max_mails(optarg);
                 break;
             default:
                 fprintf(stderr, "unknown argument %c.\n", c);

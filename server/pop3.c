@@ -17,6 +17,8 @@
 #include "./parser/parser_definition/byte_stuffing_parser_definition.h"
 #include "args.h"
 
+
+uint8_t
 #define MAX_CMD 5
 #define MAX_ARG 41
 #define WELCOME_MESSAGE "+OK POP3 server\r\n"

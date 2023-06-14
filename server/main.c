@@ -12,6 +12,7 @@
 #include <netinet/tcp.h>
 #include "selector.h"
 #include "pop3.h"
+#include "admin.h"
 #include "args.h"
 
 #define MAX_PENDING_CONNECTIONS 20
@@ -59,13 +60,19 @@ int main(int argc, const char* argv[]) {
     addr_6.sin6_addr = in6addr_any;
     addr_6.sin6_port = htons(port);
 
+    struct sockaddr_in admin_addr;
+    memset(&admin_addr,0,sizeof (admin_addr));
+    admin_addr.sin_family = AF_INET;
+    admin_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    admin_addr.sin_port = htons(1024); //TODO: hacer que se pueda cambiar
+
     //AF_INET -> indica que usa IPV4
     //SOCK_STREAM -> flujo multidireccional de datos confiable
     //IPPROTO_TCP -> indica que va a usar TCP para lograr lo anterior
     //Devuelve el fd del socket (pasivo)
     const int server = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     const int server_6 = socket(AF_INET6,SOCK_STREAM,IPPROTO_TCP);
-
+    const int admin = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     //Si hubo algun error al abrir el socket
     if(server < 0) {
         err_msg = "unable to create socket for ipv4";
@@ -74,6 +81,11 @@ int main(int argc, const char* argv[]) {
 
     if(server_6 < 0) {
         err_msg = "unable to create socket for ipv6";
+        goto finally;
+    }
+
+    if(admin < 0){
+        err_msg = "unable to create socket for admin in ipv4";
         goto finally;
     }
 
@@ -88,6 +100,7 @@ int main(int argc, const char* argv[]) {
     //TODO: revisar, deberia hacer que solo acepte IPV6 y con eso poder usar el mismo puerto
     setsockopt(server_6, IPPROTO_IPV6, IPV6_V6ONLY, &(int){ 1 }, sizeof(int));
     setsockopt(server_6, SOL_SOCKET, SO_REUSEADDR, &(int){ 1 }, sizeof(int));
+    setsockopt(admin, SOL_SOCKET, SO_REUSEADDR, &(int){ 1 }, sizeof(int));
 
     //asigna la direccion IP y el puerto al fd server
     //si retorna negativo falla
@@ -98,6 +111,11 @@ int main(int argc, const char* argv[]) {
 
     if(bind(server_6, (struct sockaddr*) &addr_6, sizeof(addr_6)) < 0) {
         err_msg = "unable to bind socket for ipv6";
+        goto finally;
+    }
+
+    if(bind(admin, (struct sockaddr*) &admin_addr, sizeof(admin_addr)) < 0) {
+        err_msg = "unable to bind socket for admin in ipv4";
         goto finally;
     }
 
@@ -135,6 +153,11 @@ int main(int argc, const char* argv[]) {
         goto finally;
     }
 
+    if(selector_fd_set_nio(admin) == -1){
+        err_msg = "getting server socket flags for admin in ipv4";
+        goto finally;
+    }
+
     //Opciones de configuracion del selector 
     //Decimos que usamos sigalarm para los trabajos bloqueantes (no nos interesa)
     //Espera 10 segundos hasta salir del select interno
@@ -163,9 +186,15 @@ int main(int argc, const char* argv[]) {
 
     //TODO: cambiar para nuestros handlers
     const struct fd_handler pop3_handler = {
-        .handle_read       = pop3_passive_accept,
-        .handle_write      = NULL,
-        .handle_close      = NULL, // nada que liberar
+            .handle_read       = pop3_passive_accept,
+            .handle_write      = NULL,
+            .handle_close      = NULL, // nada que liberar
+    };
+
+    const struct fd_handler admin_handler = {
+            .handle_read    = admin_read,
+            .handle_write   = NULL,
+            .handle_close   = NULL
     };
 
     //Registra al fd del server, suscribiendolo para la lectura
@@ -181,6 +210,13 @@ int main(int argc, const char* argv[]) {
                            OP_READ, pop3_args);
     if(ss != SELECTOR_SUCCESS) {
         err_msg = "registering fd for ipv6";
+        goto finally;
+    }
+
+    ss = selector_register(selector, admin, &admin_handler,
+                           OP_READ, pop3_args);
+    if(ss != SELECTOR_SUCCESS) {
+        err_msg = "registering fd for admin in ipv4";
         goto finally;
     }
 
@@ -227,6 +263,10 @@ int main(int argc, const char* argv[]) {
 
     if(server_6 >= 0){
         close(server_6);
+    }
+
+    if(admin >=0){
+        close(admin);
     }
 
     return ret;

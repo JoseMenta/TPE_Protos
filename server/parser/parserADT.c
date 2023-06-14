@@ -3,12 +3,15 @@
 #include <errno.h>
 #include <stdbool.h>
 
+#include "../logging/logger.h"
+
 #include "parserADT.h"
 
 
 parserADT parser_init(const parser_definition * def) {
     parserADT p = calloc(1, sizeof(parserCDT));
     if(p == NULL || errno == ENOMEM) {
+        log(LOG_ERROR, "Error creating parserADT");
         return NULL;
     }
     if (def->init != NULL) {

@@ -307,7 +307,7 @@ void pop3_passive_accept(struct selector_key* key) {
     const int client_fd = accept(key->fd, (struct sockaddr *) &address, &address_len);
     //Si tuvimos un error al crear el socket activo o no lo pudimos hacer no bloqueante
     if (client_fd == -1){
-        log(LOG_ERROR, "Error creating active socker for user");
+        log(LOG_ERROR, "Error creating active socket for user");
         goto fail;
     }
     if(selector_fd_set_nio(client_fd) == -1) {
@@ -316,12 +316,14 @@ void pop3_passive_accept(struct selector_key* key) {
     }
 
     if((state = pop3_create(key->data))==NULL){
+        log(LOG_ERROR, "Error on pop3 create")
         goto fail;
     }
     state->connection_fd = client_fd;
     logf(LOG_INFO, "registering client with fd %d", client_fd);
     //registramos en el selector al nuevo socket, y nos interesamos en escribir para mandarle el mensaje de bienvenida
     if(selector_register(key->s,client_fd,&handler,OP_WRITE,state)!= SELECTOR_SUCCESS){
+        log(LOG_ERROR, "Failed to register socket")
         goto fail;
     }
     //Si tenemos metricas, cambiarlas aca
@@ -347,6 +349,7 @@ pop3* pop3_create(void * data){
     extern const parser_definition byte_stuffing_parser_definition;
     pop3* ans = calloc(1,sizeof(pop3));
     if(ans == NULL || errno == ENOMEM){ //errno por optimismo Linux
+        log(LOG_ERROR,"Error reserving memory for state");
         return NULL;
     }
     // Se inicializa la maquina de estados para el cliente
@@ -368,6 +371,7 @@ pop3* pop3_create(void * data){
     strncpy((char*)ptr,WELCOME_MESSAGE,max);
     buffer_write_adv(&(ans->info_write_buff),strlen(WELCOME_MESSAGE));
 
+    log(LOG_DEBUG, "Finished initializing structure");
     return ans;
 }
 
@@ -441,6 +445,7 @@ unsigned hello_write(struct selector_key* key){
     ssize_t sent_count = send(key->fd,ptr,max,MSG_NOSIGNAL);
 
     if(sent_count == -1){
+        log(LOG_ERROR,"Error writing at socket");
         return FINISHED;
     }
     buffer_read_adv(&(state->info_write_buff),sent_count);
@@ -450,6 +455,7 @@ unsigned hello_write(struct selector_key* key){
     }
     //Si ya no hay mas para escribir y termine con el mensaje de bienvenida
     if(selector_set_interest(key->s,key->fd,OP_READ) != SELECTOR_SUCCESS){
+        log(LOG_ERROR,"Error changing socket interest to OP_READ in hello state");
         return FINISHED;
     }
     return READING_REQUEST;
@@ -463,6 +469,7 @@ unsigned int read_request(struct selector_key* key){
     ssize_t read_count = recv(key->fd, ptr, max, 0);
 
     if(read_count<=0){
+        log(LOG_ERROR,"Error reading at socket");
         return FINISHED;
     }
     //Avanzamos la escritura en el buffer
@@ -487,7 +494,7 @@ unsigned int read_request(struct selector_key* key){
 //                return FINISHED;
 //            }
             pop3_command command = get_command(state->cmd);
-            
+            logf(LOG_DEBUG,"Reading request for cmd: %s", command>=0 ? commands[command].name : "invalid command");
             state->command = command;
             get_pop3_arg(state->pop3_parser,state->arg,MAX_ARG);
 //            pop3_command command = get_command(parser_command);
@@ -499,14 +506,17 @@ unsigned int read_request(struct selector_key* key){
 //            }
 //            free((void*)parser_data);
             if(parser == PARSER_ERROR || command == ERROR_COMMAND || !commands[command].check(state->arg)){
+                log(LOG_ERROR, "Unknown command");
                 state->command = ERROR_COMMAND;
             }
             if(!check_command_for_protocol_state(state->pop3_protocol_state, command)){
+                logf(LOG_ERROR,"Command %s not allowed in this state",commands[command]);
                 state->command = ERROR_COMMAND;
             }
             parser_reset(state->pop3_parser);
             //Vamos a procesar la respuesta
             if(selector_set_interest(key->s,key->fd,OP_WRITE) != SELECTOR_SUCCESS){
+                log(LOG_ERROR, "Error setting interest");
                 return FINISHED;
             }
             return WRITING_RESPONSE; //vamos a escribir la respuesta
@@ -530,6 +540,7 @@ unsigned int write_response(struct selector_key* key){
         if(ret_state!=WRITING_RESPONSE){
             //Dejo de suscribirme en donde estoy, tengo que ir a otro lado
             if(selector_set_interest(key->s,key->fd,OP_NOOP) != SELECTOR_SUCCESS){
+                log(LOG_ERROR, "Error setting interest");
                 return FINISHED;
             }
             return ret_state;
@@ -541,6 +552,7 @@ unsigned int write_response(struct selector_key* key){
     ssize_t sent_count = send(key->fd,ptr,max,MSG_NOSIGNAL);
 
     if(sent_count == -1){
+        log(LOG_ERROR, "Error writing in socket");
         return FINISHED;
     }
     buffer_read_adv(&(state->info_write_buff),sent_count);
@@ -567,6 +579,7 @@ unsigned int write_response(struct selector_key* key){
 //                    return FINISHED;
 //                }
                 pop3_command command = get_command(state->cmd);
+                logf(LOG_DEBUG,"Writing request for cmd: %s", commands[command]);
                 state->command = command;
                 get_pop3_arg(state->pop3_parser,state->arg,MAX_ARG);
 //                state->arg = get_pop3_arg(parser_data);
@@ -577,8 +590,10 @@ unsigned int write_response(struct selector_key* key){
 //                free((void*)parser_data);
                 if(parser == PARSER_ERROR || command == ERROR_COMMAND || !commands[command].check(state->arg)){
                     state->command = ERROR_COMMAND;
+                    log(LOG_ERROR, "Unknown command");
                 }
                 if(!check_command_for_protocol_state(state->pop3_protocol_state, command)){
+                    logf(LOG_ERROR,"Command %s not allowed in this state",commands[command]);
                     state->command = ERROR_COMMAND;
                 }
                 parser_reset(state->pop3_parser);
@@ -588,6 +603,7 @@ unsigned int write_response(struct selector_key* key){
         buffer_read_adv(&(state->info_read_buff),max);
         //No hay un comando completo, volvemos a leer
         if(selector_set_interest(key->s,key->fd,OP_READ) != SELECTOR_SUCCESS){
+            log(LOG_ERROR, "Error setting interest");
             return FINISHED;
         }
         return READING_REQUEST;
@@ -597,6 +613,7 @@ unsigned int write_response(struct selector_key* key){
 }
 
 void finish_connection(const unsigned state, struct selector_key *key){
+    log(LOG_DEBUG, "Finishing connection");
     pop3 * data = GET_POP3(key);
     if(data->pop3_protocol_state == TRANSACTION){
         data->user_s->logged=false;
@@ -937,6 +954,7 @@ int retr_action(pop3* state){
             if(PARSER_ACTION == parser_feed(state->byte_stuffing_parser, file_ptr[file])) {
                 //tengo que hacer byte stuffing
                 //vi un punto al inicio de una linea nueva
+                logf(LOG_DEBUG,"Doing byte stuffing in write %d and file %d", write, file);
                 write_ptr[write++] = '.'; //agrego un punto al principio
             }
             write_ptr[write] = file_ptr[file];
@@ -969,17 +987,20 @@ void process_open_file(const unsigned state, struct selector_key *key){
     //es de la maquina de estados esto
     pop3* data = GET_POP3(key);
     if(!data->state_data.transaction.file_opened){
+        log(LOG_DEBUG,"Opening file");
         //Tenemos que abrir el archivo y registrarlo en el selector buscando leer
         char * path =  data->path_to_user_maildir;
         int dir_fd = open(path,O_DIRECTORY);//abrimos el directorio
         if(dir_fd==-1){
             //hubo un error abriendo el directorio
+            log(LOG_ERROR, "Error opening directory");
             exit(1);
         }
         //Obtenemos el mail que se desea abrir
         email curr_email = data->emails[data->state_data.transaction.arg-1];
         int file_fd = openat(dir_fd,curr_email.name,O_RDONLY);
         if(file_fd==-1){
+            log(LOG_ERROR, "Error opening current email");
             exit(1);
         }
         close(dir_fd);//cerramos el directorio, ya no nos sirve
@@ -995,6 +1016,7 @@ void process_open_file(const unsigned state, struct selector_key *key){
 unsigned int process_response(struct  selector_key* key){
     pop3* state = GET_POP3(key);
     if(!state->state_data.transaction.file_opened){
+        log(LOG_ERROR, "Error opening file");
         return FINISHED;//cerramos la conexion, no pudimos abrir el archivo
     }
     //Leer del archivo y mandarlo a el buffer intermedio
@@ -1003,21 +1025,25 @@ unsigned int process_response(struct  selector_key* key){
     //Estoy leyendo del archivo, y me deberian llamar aca con key en el archivo
     ssize_t read_count = read(key->fd, ptr, max);
     if(read_count==0){
+        log(LOG_DEBUG, "Finished reading file");
         //terminamos de leer el archivo, lo señalo para no volver aca
         state->state_data.transaction.file_ended = true;
     }
     if(read_count<0){
+        log(LOG_ERROR, "Error reading file");
         return FINISHED;
     }
     //Avanzamos la escritura en el buffer
     buffer_write_adv(&(state->info_file_buff), read_count);
     if(selector_set_interest(key->s,state->connection_fd, OP_WRITE) != SELECTOR_SUCCESS
         || selector_set_interest(key->s,state->state_data.transaction.file_fd,OP_NOOP)!= SELECTOR_SUCCESS){
+        log(LOG_ERROR, "Error setting interest");
         return FINISHED;
     }
     if(state->state_data.transaction.file_ended == true){
         //Es la ultima vez que voy a venir al archivo, lo cerramos
         if(selector_unregister_fd(key->s,state->state_data.transaction.file_fd)!= SELECTOR_SUCCESS){
+            log(LOG_ERROR, "Error unregistering file fd");
             return FINISHED;
         }
     }
@@ -1031,6 +1057,7 @@ int dele_action(pop3* state){
     long index = strtol(state->arg, NULL,10);
     //REvisamos si se puede eliminar
     if( index <= state->emails_count &&  index>0 &&  !state->emails[index-1].deleted){
+        logf(LOG_INFO, "Deleting email with index %d", index-1);
         state->emails[index-1].deleted = true;
         msj_ret = OK_MESSSAGE;
     }
@@ -1067,6 +1094,7 @@ int noop_action(pop3* state){
 int quit_action(pop3* state){
     state->final_error_message = QUIT_MESSAGE;
     if(state->pop3_protocol_state == AUTHORIZATION){
+        log(LOG_ERROR, "Error setting interest");
         return ERROR;//cierro la conexion
     }
     state->user_s->logged=false;
@@ -1078,6 +1106,7 @@ int quit_action(pop3* state){
     }
     for(size_t i = 0; i<state->emails_count; i++){
         if(state->emails[i].deleted){
+            logf(LOG_INFO, "Deleting email %d",i);
             //elimnamos el archivo (cuando ningun proceso lo tenga abierto, lo va a sacar)
             unlinkat(dir_fd,state->emails[i].name,0);
         }

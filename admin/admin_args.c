@@ -51,8 +51,8 @@ void parse_args(int argc, const char **argv, client_info client) {
                 } else {
                     user(optarg, &user_name, &user_pass);
                     nusers++;
-                    snprintf(buff, DGRAM_SIZE, "%s\n%s\n%d\n%s\n%s\n%s\n%s\n\n",
-                                 client->name_protocol, client->version, client->count_commans, token, client->command_names[ADD_USER], user_name, user_pass);
+                    snprintf(buff, DGRAM_SIZE, "%s\n%s\n%s\n%d\n%s\n%s\n%s\n\n",
+                                 client->name_protocol, client->version, token, client->count_commans, client->command_names[ADD_USER], user_name, user_pass);
                     strcpy(client->list_command[client->count_commans].request, buff);
                     client->list_command[client->count_commans].timeout=true;
                     client->list_command[client->count_commans].name_command = ADD_USER;
@@ -78,8 +78,8 @@ void parse_args(int argc, const char **argv, client_info client) {
                 client->count_commans++;
                 break;
             case 'm':
-                snprintf(buff, DGRAM_SIZE, "%s\n%s\n%d\n%s\n%s\n\n",
-                         client->name_protocol, client->version, client->count_commans, token, client->command_names[GET_MAX_MAILS]);
+                snprintf(buff, DGRAM_SIZE, "%s\n%s\n%s\n%d\n%s\n\n",
+                         client->name_protocol, client->version, token,client->count_commans, client->command_names[GET_MAX_MAILS]);
                 strcpy(client->list_command[client->count_commans].request, buff);
                 client->list_command[client->count_commans].timeout=true;
                 client->list_command[client->count_commans].name_command = GET_MAX_MAILS;

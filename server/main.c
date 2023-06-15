@@ -61,7 +61,7 @@ int main(int argc, const char* argv[]) {
         return 1;
     }
 
-    logger_init(selector, "", stdout);
+    logger_init(selector, "", NULL);
 
     struct pop3args* pop3_args = malloc(sizeof(struct pop3args));
     if(pop3_args == NULL || errno == ENOMEM){
@@ -280,6 +280,9 @@ int main(int argc, const char* argv[]) {
     }
     log(LOG_INFO, "Closing selector");
     selector_close();
+    usersADT_destroy(pop3_args->users);
+    free(pop3_args->maildir_path);
+    free(pop3_args);
 
     //Si pudimos obtener el socket, lo cerramos
     if(server >= 0) {

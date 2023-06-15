@@ -27,8 +27,9 @@ usersADT usersADT_init(void){
 void usersADT_destroy(usersADT u) {
     log(LOG_INFO, "Destroying usersADT");
     for(unsigned int i = 0; i < u->users_count; i++) {
-        free((char *) u->users_array[u->users_count].name);
-        free(u->users_array[u->users_count].pass);
+        logf(LOG_INFO, "Destroying usersADT '%s'", u->users_array[i].name);
+        free(u->users_array[i].name);
+        free(u->users_array[i].pass);
     }
     free(u->users_array);
     free(u);
@@ -131,7 +132,7 @@ bool usersADT_update_pass(usersADT u, const char * user_name, const char * new_p
 }
 
 static int usersADT_find_user(usersADT u, const char * user_name) {
-    for(unsigned int i = 0; i < u->users_count; i++) {
+    for(int i = 0; i < u->users_count; i++) {
         if(strcmp(u->users_array[i].name, user_name) == 0) {
             return i;
         }

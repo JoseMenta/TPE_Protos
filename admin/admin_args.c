@@ -141,7 +141,7 @@ void parse_args(int argc, const char **argv, client_info client) {
     if (optind < argc) {
         fprintf(stderr, "argument not accepted: ");
         while (optind < argc) {
-            fprintf(stderr, "%s pepe ", argv[optind++]);
+            fprintf(stderr, "%s ", argv[optind++]);
         }
         fprintf(stderr, "\n");
     }

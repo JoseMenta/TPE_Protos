@@ -170,7 +170,7 @@ int logger_init(fd_selector selector_param, const char* log_file, FILE* log_stre
     selector = selector_param;
     log_file_fd = selector_param == NULL ? -1 : try_open_log_file(log_file, tm);
     log_stream = log_stream_param;
-    log_level = MIN_LOG_LEVEL;
+    log_level = MAX_LOG_LEVEL;
 
     // Registrar el archivo si lo pudimos abrir
     if (log_file_fd >= 0){

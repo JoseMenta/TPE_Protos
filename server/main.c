@@ -61,16 +61,16 @@ int main(int argc, const char* argv[]) {
     }
 
     logger_init(selector, "", stdout);
-    logger_set_level(LOG_DEBUG);
-    log(LOG_INFO, "Initializing logger");
 
     struct pop3args* pop3_args = malloc(sizeof(struct pop3args));
     if(pop3_args == NULL || errno == ENOMEM){
         log(LOG_FATAL, "Cant allocate memory for pop3args");
         return 1;
     }
-    log(LOG_DEBUG, "Parsing arguments");
     parse_args(argc, argv, pop3_args);
+
+    logger_set_level(pop3_args->log_level);
+    log(LOG_INFO, "Initializing logger");
 
     // No queremos que se haga buffering de la salida estandar (que se envíe al recibir un \n), sino que se envíe inmediatamente
     log(LOG_DEBUG, "Setting stdout to unbuffered");

@@ -9,9 +9,9 @@ static int usersADT_find_user(usersADT u, const char * user_name);
 usersADT usersADT_init(){
     log(LOG_INFO, "Initializing usersADT");
     usersADT u = calloc(1, sizeof(struct usersCDT));
-    if(u == NULL) {
+    if(u == NULL || errno == ENOMEM) {
         log(LOG_ERROR, "Unable to allocate memory for usersADT");
-        return u;
+        return NULL;
     }
     u->array_length = CHUNK;
     u->users_count = 0;

@@ -2,6 +2,7 @@
 #include <stdlib.h>    /* for exit */
 #include <limits.h>    /* LONG_MIN et al */
 #include <string.h>    /* memset */
+#include <strings.h>   /* strcasecmp */
 #include <errno.h>
 #include <getopt.h>
 #include "args.h"
@@ -45,6 +46,23 @@ static void user(char *s, char ** user_name, char ** user_pass) {
     }
 }
 
+static log_level_t log_level(const char * level) {
+    if(strcasecmp(level, "DEBUG") == 0) {
+        return LOG_DEBUG;
+    } else if(strcasecmp(level, "INFO") == 0) {
+        return LOG_INFO;
+    } else if(strcasecmp(level, "WARNING") == 0) {
+        return LOG_WARNING;
+    } else if(strcasecmp(level, "ERROR") == 0) {
+        return LOG_ERROR;
+    } else if(strcasecmp(level, "FATAL") == 0) {
+        return LOG_FATAL;
+    } else {
+        fprintf(stderr, "Unknown log level: '%s'\n", level);
+        exit(1);
+    }
+}
+
 static void
 version(void) {
     fprintf(stderr, "POP3 version 0.1\n"
@@ -62,6 +80,7 @@ usage(const char *progname) {
         "   -P <conf port>   Puerto entrante para conexiones de configuracion del servidor.\n"
         "   -d <path>        Path del directorio Maildir.\n"
         "   -u <name>:<pass> Usuario y contraseña de usuario POP3. Indicarlo para cada usuario que se desea agregar\n"
+        "   -l <log level>   Nivel de log. Valores posibles: DEBUG, INFO, WARNING, ERROR, FATAL. Default: INFO.\n"
         "   -v               Imprime información sobre la versión.\n"
         "\n",
         progname);
@@ -75,12 +94,16 @@ parse_args(const int argc, const char **argv, struct pop3args *args) {
     args->pop3_config_port = DEFAULT_POP3_CONFIG_PORT;
     args->maildir_path = DEFAULT_MAILDIR_PATH;
     args->users = usersADT_init();
+    if(args->users == NULL) {
+        exit(1);
+    }
+    args->log_level = LOG_INFO;
 
     int c;
     int nusers = 0;
 
     while (true) {
-        c = getopt(argc, (char *const *) argv, "hp:P:u:vd:");
+        c = getopt(argc, (char *const *) argv, "hp:P:u:vd:l:");
         if (c == -1) {
             break;
         }
@@ -111,6 +134,9 @@ parse_args(const int argc, const char **argv, struct pop3args *args) {
                 exit(0);
             case 'd':
                 args->maildir_path = path(optarg);
+                break;
+            case 'l':
+                args->log_level = log_level(optarg);
                 break;
             default:
                 fprintf(stderr, "Unknown argument: '%c'.\n", c);

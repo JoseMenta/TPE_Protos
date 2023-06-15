@@ -1080,7 +1080,7 @@ int dele_action(pop3* state){
 int rset_action(pop3* state){
     //computamos el total de size
     for(int i=0; i<state->emails_count ; i++){
-        logf(LOG_DEBUG,"Unmarking to delete file %d",i+1);
+        logf(LOG_INFO,"Unmarking to delete file %d",i+1);
         state->emails[i].deleted = false;
     }
     if(try_write(OK_MESSSAGE, &(state->info_write_buff)) == TRY_PENDING){

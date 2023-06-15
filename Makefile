@@ -16,6 +16,7 @@ admin:
 
 clean:
 	rm -rf $(TARGET_DIR)
+	rm -rf $(LOG_DIR)
 	cd $(SERVER_DIR); make clean
 	cd $(ADMIN_DIR); make clean
 

@@ -15,3 +15,4 @@ SERVER_NAME = popserver
 ADMIN_DIR = ./admin
 ADMIN_NAME = popadmin
 TARGET_DIR = ./bin
+LOG_DIR = ./log

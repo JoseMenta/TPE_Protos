@@ -3,6 +3,7 @@
 #include <string.h>
 #include <errno.h>
 #include "pop3_parser_definition.h"
+#include "../../logging/logger.h"
 
 #define ASCII_a                     0x61
 #define ASCII_z                     0x7A
@@ -141,24 +142,6 @@ void get_pop3_arg(parserADT p, char* buff, int max) {
     buff[max-1] = '\0';
 }
 
-//char * get_pop3_cmd(pop3_parser_data * d) {
-//    char * copy = calloc(d->cmd_length + 1, sizeof(char));
-//    if (copy == NULL) {
-//        return NULL;
-//    }
-//    strncpy(copy, d->cmd, d->cmd_length);
-//    return copy;
-//}
-//
-//char * get_pop3_arg(pop3_parser_data * d) {
-//    char * copy = calloc(d->arg_length + 1, sizeof(char));
-//    if (copy == NULL) {
-//        return NULL;
-//    }
-//    strncpy(copy, d->arg, d->arg_length);
-//    return copy;
-//}
-
 // Condiciones
 static bool is_letter(uint8_t c) {
     c = tolower(c);
@@ -211,6 +194,7 @@ static parser_state def_action(void * data, uint8_t c) {
 static void * pop3_parser_init(void) {
     pop3_parser_data * data = calloc(1, sizeof(pop3_parser_data));
     if(data == NULL || errno == ENOMEM) {
+        log(LOG_ERROR, "Unable to allocate memory for pop3_parser_data");
         return NULL;
     }
     data->cmd_length = 0;
@@ -223,6 +207,7 @@ static void * pop3_parser_copy(void * data) {
     pop3_parser_data * d = (pop3_parser_data *) data;
     pop3_parser_data * copy = calloc(1, sizeof(pop3_parser_data));
     if (copy == NULL || errno == ENOMEM) {
+        log(LOG_ERROR, "Unable to copy pop3_parser_data");
         return NULL;
     }
     copy->cmd_length = d->cmd_length;

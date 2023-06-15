@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include "usersADT.h"
+#include "logging/logger.h"
 
 #define DEFAULT_POP3_PORT 1100
 #define DEFAULT_POP3_CONFIG_PORT 1101
@@ -15,6 +16,7 @@ struct pop3args {
     unsigned short  pop3_port;
     unsigned short  pop3_config_port;
     char *          maildir_path;
+    log_level_t     log_level;
     usersADT        users;
     unsigned long   max_mails;
 };
@@ -26,6 +28,7 @@ struct pop3args {
  */
 void 
 parse_args(const int argc, const char **argv, struct pop3args *args);
+
 int change_maildir(struct pop3args* args, const char* maildir);
 
 #endif

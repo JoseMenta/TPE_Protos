@@ -7,30 +7,32 @@
 
 #define MAX_USERS 500
 
+static void help(const char *progname);
 
-/*
-typedef enum{
-    ADD_USER, -A
-    CHANGE_PASS, -C
-    REMOVE_USER, -r
-    GET_MAX_MAILS, -m
-    SET_MAX_MAILS, -M
-    GET_MAILDIR, -d
-    SET_MAILDIR, -D
-    STAT_PREVIOUS_CONNECTIONS, -p
-    STAT_CURRENT_CONNECTIONS, -c
-    STAT_BYTES_TRANSFERRED, -b
-}admin_command;
-*/
+static void showVersion(client_info client, const char * program);
 
-void parse_args(const int argc, const char **argv, client_info client) {
+static void user(char *s, char ** user_name, char ** user_pass);
+
+static unsigned short number(const char *s);
+
+void parse_args(int argc, const char **argv, client_info client) {
     int c;
     int nusers = 0;
-    char buff[1024];
-    int i = 0;
+    char buff[DGRAM_SIZE];
+    char *user_name, *user_pass;
+    char token[50];
+
+    printf("\nIngrese token de verificación:");
+    scanf( "%s", token);
+
+    //Otra manera pasarlo al final de la línea de comandos
+    //strcpy(token, argv[argc-1]);
+    //argc -= 1;
+
 
     while (true) {
-        c = getopt(argc, (char *const *) argv, "hvA:C:R:mM:dD:pcbt:");
+        c = getopt(argc, (char *const *) argv, "hvA:C:R:mM:dD:pcb");
+
         if (c == -1) {
             break;
         }
@@ -47,56 +49,96 @@ void parse_args(const int argc, const char **argv, client_info client) {
                     fprintf(stderr, "maximun number of command line users reached: %d.\n", MAX_USERS);
                     exit(1);
                 } else {
-                    char *user_name, *user_pass;
                     user(optarg, &user_name, &user_pass);
                     nusers++;
-                    snprintf(buff, 50, "%s\n%s\n%d\n%s\n%s\n%s\n\n",
-                                 client->name_protocol, client->version, 2, "token", user_name, user_pass);
-                    printf(buff);
+                    snprintf(buff, DGRAM_SIZE, "%s\n%s\n%d\n%s\n%s\n%s\n%s\n\n",
+                                 client->name_protocol, client->version, client->count_commans, token, client->command_names[ADD_USER], user_name, user_pass);
+                    strcpy(client->list_commands[client->count_commans], buff);
+                    client->count_commans++;
                 }
                 break;
             case 'C':
-                printf("en d");
+                user(optarg, &user_name, &user_pass);
+                snprintf(buff, DGRAM_SIZE, "%s\n%s\n%d\n%s\n%s\n%s\n%s\n\n",
+                         client->name_protocol, client->version, client->count_commans, token, client->command_names[CHANGE_PASS], user_name, user_pass);
+                strcpy(client->list_commands[client->count_commans], buff);
+                client->count_commans++;
                 break;
             case 'R':
-                printf("en u");
+                user(optarg, &user_name, &user_pass);
+                snprintf(buff, DGRAM_SIZE, "%s\n%s\n%d\n%s\n%s\n%s\n%s\n\n",
+                         client->name_protocol, client->version, client->count_commans, token, client->command_names[REMOVE_USER], user_name, user_pass);
+                strcpy(client->list_commands[client->count_commans], buff);
+                client->count_commans++;
                 break;
             case 'm':
-                printf("en p");
+                snprintf(buff, DGRAM_SIZE, "%s\n%s\n%d\n%s\n%s\n\n",
+                         client->name_protocol, client->version, client->count_commans, token, client->command_names[GET_MAX_MAILS]);
+                strcpy(client->list_commands[client->count_commans], buff);
+                client->count_commans++;
                 break;
             case 'M':
-                printf("en r");
+                snprintf(buff, DGRAM_SIZE, "%s\n%s\n%d\n%s\n%s\n%d\n\n",
+                         client->name_protocol, client->version, client->count_commans, token, client->command_names[SET_MAX_MAILS], number( optarg));
+                strcpy(client->list_commands[client->count_commans], buff);
+                client->count_commans++;
                 break;
             case 'd':
-                printf("en r");
+                snprintf(buff, DGRAM_SIZE, "%s\n%s\n%d\n%s\n%s\n\n",
+                         client->name_protocol, client->version, client->count_commans, token, client->command_names[GET_MAILDIR]);
+                strcpy(client->list_commands[client->count_commans], buff);
+                client->count_commans++;
                 break;
             case 'D':
-                printf("en r");
+                snprintf(buff, DGRAM_SIZE, "%s\n%s\n%d\n%s\n%s\n%s\n\n",
+                         client->name_protocol, client->version, client->count_commans, token, client->command_names[SET_MAILDIR], optarg);
+                strcpy(client->list_commands[client->count_commans], buff);
+                client->count_commans++;
                 break;
             case 'p':
-                printf("en r");
+                snprintf(buff, DGRAM_SIZE, "%s\n%s\n%d\n%s\n%s\n\n",
+                         client->name_protocol, client->version, client->count_commans, token, client->command_names[STAT_PREVIOUS_CONNECTIONS]);
+                strcpy(client->list_commands[client->count_commans], buff);
+                client->count_commans++;
                 break;
             case 'c':
-                printf("en r");
+                snprintf(buff, DGRAM_SIZE, "%s\n%s\n%d\n%s\n%s\n\n",
+                         client->name_protocol, client->version, client->count_commans, token, client->command_names[STAT_CURRENT_CONNECTIONS]);
+                strcpy(client->list_commands[client->count_commans], buff);
+                client->count_commans++;
                 break;
             case 'b':
-                printf("en r");
-                break;
-            case 't':
-                printf("en t");
+                snprintf(buff, DGRAM_SIZE, "%s\n%s\n%d\n%s\n%s\n\n",
+                         client->name_protocol, client->version, client->count_commans, token, client->command_names[STAT_BYTES_TRANSFERRED]);
+                strcpy(client->list_commands[client->count_commans], buff);
+                client->count_commans++;
                 break;
             default:
-                printf("en ninguno");
+                printf("Invalid state\n");
                 break;
         }
     }
     if (optind < argc) {
         fprintf(stderr, "argument not accepted: ");
         while (optind < argc) {
-            fprintf(stderr, "%s ", argv[optind++]);
+            fprintf(stderr, "%s pepe ", argv[optind++]);
         }
         fprintf(stderr, "\n");
     }
+}
+
+
+static unsigned short number(const char *s) {
+    char *end     = 0;
+    const long sl = strtol(s, &end, 10);
+
+    if (end == s|| '\0' != *end
+        || ((LONG_MIN == sl || LONG_MAX == sl) && ERANGE == errno)
+        || sl < 0 || sl > USHRT_MAX) {
+        fprintf(stderr, "number should in in the range of 1-65536: %s\n", s);
+        exit(1);
+    }
+    return (unsigned short)sl;
 }
 
 static void user(char *s, char ** user_name, char ** user_pass) {

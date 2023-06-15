@@ -36,13 +36,6 @@ int main(int argc, const char* argv[]){
         exit(1);
     }
 
-    /*
-    if(bind(server, (struct sockaddr*) &addr, sizeof(addr)) < 0) {
-        printf("unable to bind socket for ipv4");
-        free(client);
-        exit(1);
-    }
-    */
 
     parse_args(argc, argv, client);
 

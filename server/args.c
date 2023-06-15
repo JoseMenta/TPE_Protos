@@ -44,6 +44,22 @@ static char * path(const char * path){
     strncpy(ret_str, path, path_len);
     return ret_str;
 }
+/*
+ * Cambia el directorio maildir del servidor
+ * Guarda una copia en el heap, por lo que no se queda con char* maildir
+ */
+int change_maildir(struct pop3args* args, const char* maildir){
+    char* temp = args->maildir_path;
+    int maildir_len = strlen(maildir);
+    args->maildir_path = calloc(maildir_len+1, sizeof (char));
+    if(args->maildir_path == NULL || errno == ENOMEM){
+        args->maildir_path = temp; //me quedo con el de antes
+        return 1;
+    }
+    free(temp);
+    strncpy(args->maildir_path,maildir,maildir_len);
+    return 0;
+}
 
 static void user(char *s, char ** user_name, char ** user_pass) {
     char *p = strchr(s, ':');
@@ -87,7 +103,7 @@ parse_args(const int argc, const char **argv, struct pop3args *args) {
 
     args->pop3_port = DEFAULT_POP3_PORT;
     args->pop3_config_port = DEFAULT_POP3_CONFIG_PORT;
-    args->maildir_path = DEFAULT_MAILDIR_PATH;
+    args->maildir_path = NULL;
     args->max_mails = DEFAULT_MAX_MAILS;
     args->users = usersADT_init();
 
@@ -143,4 +159,9 @@ parse_args(const int argc, const char **argv, struct pop3args *args) {
         fprintf(stderr, "\n");
         exit(1);
     }
+    if(args->maildir_path == NULL){
+        fprintf(stderr, "Maildir path missing. Please pass a maildir path with -d <path>");
+        exit(1);
+    }
+
 }

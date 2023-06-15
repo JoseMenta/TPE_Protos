@@ -16,14 +16,16 @@
 #define MAX_LINES 10
 #define DGRAM_SIZE 1024 //10 lineas de las que soportamos
 #define DATA_SIZE 640
-#define PROTOCOL_SIZE 5
+#define PROTOCOL_SIZE 6
 #define TOKEN_SIZE 128
 #define COMMAND_SIZE 128
 #define ARG_SIZE 128
 #define ARG_COUNT 5
-#define ADMIN_PROTOCOL "PROTO"
+#define ADMIN_PROTOCOL "PROTOS"
+#define HEADER_LINES 5
 //TODO: parametrizar
 #define ACCESS_TOKEN "1234"
+
 
 typedef enum{
     ADMIN_ADD_USER,
@@ -139,14 +141,15 @@ static command commands[] = {
 admin_status parse_request(request* req, char * buff, size_t buff_len);
 static void send_response(int socket, admin_status status, char* data, request * req,struct sockaddr_storage* client_addr, size_t addr_len){
     char ans[DGRAM_SIZE];
-    int len = snprintf(ans,DGRAM_SIZE,"PROTOS\n%ld\n%zu\n%c\n%s",req->version,req->req_id,status==OK?'+':'-',data);
+    int len = snprintf(ans,DGRAM_SIZE,"PROTOS\n%ld\n%zu\n%c\n%s\n",req->version,req->req_id,status==OK?'+':'-',data);
     if(len<0){
         printf("Error generando la respuesta del admin");
         return;
     }
-    if(sendto(socket,ans,DGRAM_SIZE,0,(struct sockaddr*) client_addr,addr_len) < 0){
+    if(sendto(socket,ans,len+1,0,(struct sockaddr*) client_addr,addr_len) < 0){
         printf("Error enviando la respuesta del admin");
     }
+    printf("Mande la respuesta UDP\n");
 }
 
 void admin_read(struct selector_key* key){
@@ -189,10 +192,10 @@ admin_status parse_request(request* request, char* buff, size_t buff_len){
     char * last;
     size_t len = strlen(buff);
     int i = 0;
-    while (i<10){
+    while (i<MAX_LINES){
         last = strchr(buff,'\n');
         if(last == NULL){
-            return FORMAT_ERROR;
+            return i+1>=HEADER_LINES?OK:FORMAT_ERROR;
         }
         *last = '\0';
         int aux = strlen(buff);
@@ -211,7 +214,7 @@ admin_status parse_request(request* request, char* buff, size_t buff_len){
                 break;
             case 2:
                 strncpy(request->token,buff,TOKEN_SIZE);
-                if(strcpy(request->token, ACCESS_TOKEN) != 0){
+                if(strncasecmp(request->token, ACCESS_TOKEN,TOKEN_SIZE) != 0){
                     return INVALID_TOKEN;
                 }
                 break;
@@ -232,9 +235,9 @@ admin_status parse_request(request* request, char* buff, size_t buff_len){
                 (request->arg_c)++;
         }
         i++;
-        len -= (last - buff);
+        len -= (last - buff); //TODO: revisar esto
         if(len == 0){
-            return FORMAT_ERROR;
+            return i+1>=HEADER_LINES?OK:FORMAT_ERROR;
         }
         buff = last + 1;
     }
@@ -243,13 +246,13 @@ admin_status parse_request(request* request, char* buff, size_t buff_len){
 
 void add_user_action(int socket, request* req,struct pop3args* args, struct sockaddr_storage* client_addr, unsigned int client_len){
     char ans[DATA_SIZE];
-    if(req->arg_c!=2){
+    if(req->arg_c<2){
         send_response(socket,GENERAL_ERROR,"Cantidad de argumentos incorrecta",req,client_addr,client_len);
         return;
     }
 
     if(usersADT_add(args->users,req->args[0],req->args[1])!=0){
-        send_response(socket,GENERAL_ERROR,"Cantidad de argumentos incorrecta",req,client_addr,client_len);
+        send_response(socket,GENERAL_ERROR,"No fue posible agregar el usuario",req,client_addr,client_len);
         return;
     }
     if(snprintf(ans,DATA_SIZE,"%s\n","User added to server")<0){
@@ -261,13 +264,13 @@ void add_user_action(int socket, request* req,struct pop3args* args, struct sock
 }
 void change_pass_action(int socket, request* req,struct pop3args* args, struct sockaddr_storage* client_addr, unsigned int client_len){
     char ans[DATA_SIZE];
-    if(req->arg_c!=2){
+    if(req->arg_c<2){
         send_response(socket,GENERAL_ERROR,"Cantidad de argumentos incorrecta",req,client_addr,client_len);
         return;
     }
 
-    if(usersADT_add(args->users,req->args[0],req->args[1])!=0){
-        send_response(socket,GENERAL_ERROR,"Cantidad de argumentos incorrecta",req,client_addr,client_len);
+    if(usersADT_update_pass(args->users,req->args[0],req->args[1])!=0){
+        send_response(socket,GENERAL_ERROR,"No fue posible cambiar la contraseña del usuario",req,client_addr,client_len);
         return;
     }
     if(snprintf(ans,DATA_SIZE,"password changed for %s\n",req->args[0])<0){
@@ -276,15 +279,6 @@ void change_pass_action(int socket, request* req,struct pop3args* args, struct s
     }
     send_response(socket,OK,ans,req,client_addr,client_len);
 }
-//void remove_user_action(int socket, request* req,struct pop3args* args, struct sockaddr_storage* client_addr, unsigned int client_len){
-//    char ans[DATA_SIZE];
-//    //TODO: traer datos
-//    if(snprintf(ans,DATA_SIZE,"%d\n",100000)<0){
-//        send_response(socket,GENERAL_ERROR,"Error al generar la respuesta",req,client_addr,client_len);
-//        return;
-//    }
-//    send_response(socket,OK,ans,req,client_addr,client_len);
-//}
 
 void get_max_mails_action(int socket, request* req,struct pop3args* args, struct sockaddr_storage* client_addr, unsigned int client_len){
     char ans[DATA_SIZE];
@@ -296,7 +290,7 @@ void get_max_mails_action(int socket, request* req,struct pop3args* args, struct
 }
 void set_max_mails_action(int socket, request* req,struct pop3args* args, struct sockaddr_storage* client_addr, unsigned int client_len){
     char ans[DATA_SIZE];
-    if(req->arg_c!=1){
+    if(req->arg_c<1){
         send_response(socket,GENERAL_ERROR,"Cantidad de argumentos incorrecta",req,client_addr,client_len);
         return;
     }
@@ -315,8 +309,7 @@ void set_max_mails_action(int socket, request* req,struct pop3args* args, struct
 }
 void get_maildir_action(int socket, request* req,struct pop3args* args, struct sockaddr_storage* client_addr, unsigned int client_len){
     char ans[DATA_SIZE];
-    //TODO: traer datos
-    if(snprintf(ans,DATA_SIZE,"%d\n",100000)<0){
+    if(snprintf(ans,DATA_SIZE,"%s\n",args->maildir_path)<0){
         send_response(socket,GENERAL_ERROR,"Error al generar la respuesta",req,client_addr,client_len);
         return;
     }
@@ -324,8 +317,15 @@ void get_maildir_action(int socket, request* req,struct pop3args* args, struct s
 }
 void set_maildir_action(int socket, request* req,struct pop3args* args, struct sockaddr_storage* client_addr, unsigned int client_len){
     char ans[DATA_SIZE];
-    //TODO: traer datos
-    if(snprintf(ans,DATA_SIZE,"%d\n",100000)<0){
+    if(req->arg_c<1){
+        send_response(socket,GENERAL_ERROR,"Cantidad de argumentos incorrecta",req,client_addr,client_len);
+        return;
+    }
+    if(change_maildir(args,req->args[0])!=0){
+        send_response(socket,GENERAL_ERROR,"Could not change maildir",req,client_addr,client_len);
+        return;
+    }
+    if(snprintf(ans,DATA_SIZE,"Maildir set to %s\n",req->args[0])<0){
         send_response(socket,GENERAL_ERROR,"Error al generar la respuesta",req,client_addr,client_len);
         return;
     }
@@ -333,9 +333,9 @@ void set_maildir_action(int socket, request* req,struct pop3args* args, struct s
 
 }
 void stat_historic_connections_action(int socket, request* req,struct pop3args* args, struct sockaddr_storage* client_addr, unsigned int client_len){
+    extern unsigned long historic_connections;
     char ans[DATA_SIZE];
-    //TODO: traer datos
-    if(snprintf(ans,DATA_SIZE,"%d\n",100000)<0){
+    if(snprintf(ans,DATA_SIZE,"%lu\n",historic_connections)<0){
         send_response(socket,GENERAL_ERROR,"Error al generar la respuesta",req,client_addr,client_len);
         return;
     }
@@ -343,9 +343,9 @@ void stat_historic_connections_action(int socket, request* req,struct pop3args* 
 
 }
 void stat_current_connections_action(int socket, request* req,struct pop3args* args, struct sockaddr_storage* client_addr, unsigned int client_len){
+    extern unsigned long current_connections;
     char ans[DATA_SIZE];
-    //TODO: traer datos
-    if(snprintf(ans,DATA_SIZE,"%d\n",100000)<0){
+    if(snprintf(ans,DATA_SIZE,"%lu\n",current_connections)<0){
         send_response(socket,GENERAL_ERROR,"Error al generar la respuesta",req,client_addr,client_len);
         return;
     }
@@ -353,9 +353,9 @@ void stat_current_connections_action(int socket, request* req,struct pop3args* a
 
 }
 void stat_bytes_transferred_action(int socket, request* req,struct pop3args* args, struct sockaddr_storage* client_addr, unsigned int client_len){
+    extern unsigned long bytes_sent;
     char ans[DATA_SIZE];
-    //TODO: traer datos
-    if(snprintf(ans,DATA_SIZE,"%d\n",100000)<0){
+    if(snprintf(ans,DATA_SIZE,"%lu\n",bytes_sent)<0){
         send_response(socket,GENERAL_ERROR,"Error al generar la respuesta",req,client_addr,client_len);
         return;
     }

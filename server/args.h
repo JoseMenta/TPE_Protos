@@ -26,6 +26,7 @@ struct pop3args {
  */
 void 
 parse_args(const int argc, const char **argv, struct pop3args *args);
+int change_maildir(struct pop3args* args, const char* maildir);
 
 #endif
 

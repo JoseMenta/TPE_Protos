@@ -10,14 +10,14 @@ usersADT usersADT_init(){
     log(LOG_INFO, "Initializing usersADT");
     usersADT u = calloc(1, sizeof(struct usersCDT));
     if(u == NULL || errno == ENOMEM) {
-        log(LOG_ERROR, "Unable to allocate memory for usersADT");
+        log(LOG_FATAL, "Unable to allocate memory for usersADT");
         return NULL;
     }
     u->array_length = CHUNK;
     u->users_count = 0;
     u->users_array = calloc(CHUNK, sizeof(user_t));
     if(u->users_array == NULL || errno == ENOMEM){
-        log(LOG_ERROR, "Unable to allocate memory for users_array");
+        log(LOG_FATAL, "Unable to allocate memory for users_array");
         free(u);
         return NULL;
     }
@@ -58,7 +58,7 @@ int usersADT_add(usersADT u, const char * user_name, const char * user_pass) {
     if(u->users_count == u->array_length){
         user_t * aux = realloc(u->users_array, sizeof(user_t)*(u->array_length + CHUNK));
         if(aux == NULL) {
-            logf(LOG_ERROR, "Unable to reallocate memory for usersADT, current size: %d", u->array_length);
+            logf(LOG_FATAL, "Unable to reallocate memory for usersADT, current size: %d", u->array_length);
             goto error;
         }
         u->users_array = aux;
@@ -104,7 +104,7 @@ char * usersADT_get_user_mail_path(usersADT u, const char * base_path, const cha
 bool usersADT_validate(usersADT u, const char * user_name, const char * user_pass) {
     int user_index = usersADT_find_user(u, user_name);
     if(user_index == -1){
-        logf(LOG_ERROR, "Couldn't find user '%s' to validate", user_name);
+        logf(LOG_ERROR, "Cannot find user '%s' to validate", user_name);
         return false;
     }
     return strcmp(u->users_array[user_index].pass, user_pass);

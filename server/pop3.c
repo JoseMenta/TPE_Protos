@@ -515,7 +515,7 @@ unsigned int read_request(struct selector_key* key){
                 state->command = ERROR_COMMAND;
             }
             if(!check_command_for_protocol_state(state->pop3_protocol_state, command)){
-                logf(LOG_ERROR,"Command '%s' not allowed in this state",commands[command]);
+                logf(LOG_ERROR,"Command '%s' not allowed in this state",commands[command].name);
                 state->command = ERROR_COMMAND;
             }
             parser_reset(state->pop3_parser);
@@ -598,7 +598,7 @@ unsigned int write_response(struct selector_key* key){
                     log(LOG_ERROR, "Unknown command");
                 }
                 if(!check_command_for_protocol_state(state->pop3_protocol_state, command)){
-                    logf(LOG_ERROR,"Command '%s' not allowed in this state",commands[command]);
+                    logf(LOG_ERROR,"Command '%s' not allowed in this state",commands[command].name);
                     state->command = ERROR_COMMAND;
                 }
                 parser_reset(state->pop3_parser);
@@ -626,11 +626,13 @@ void finish_connection(const unsigned state, struct selector_key *key){
     if(data->pop3_protocol_state == TRANSACTION && data->state_data.transaction.file_opened){
         //Cierro el archivo, lo saco del selector
         if(selector_unregister_fd(key->s, data->state_data.transaction.file_fd) != SELECTOR_SUCCESS){
+            log(LOG_FATAL,"Error unregistering file fd");
             abort();
         }
     }
 
     if (selector_unregister_fd(key->s, key->fd) != SELECTOR_SUCCESS) {
+        log(LOG_FATAL,"Error unregistering fd");
         abort();
     }
     //con selector_unregister_fd, se va a llamar a la funcion pop3_close
@@ -1116,7 +1118,7 @@ int quit_action(pop3* state){
     }
     for(size_t i = 0; i<state->emails_count; i++){
         if(state->emails[i].deleted){
-            logf(LOG_INFO, "Deleting email %d",i);
+            logf(LOG_INFO, "Deleting email %ld",i+1);
             //elimnamos el archivo (cuando ningun proceso lo tenga abierto, lo va a sacar)
             unlinkat(dir_fd,state->emails[i].name,0);
         }

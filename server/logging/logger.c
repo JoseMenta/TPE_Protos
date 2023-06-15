@@ -33,8 +33,6 @@ const char* logger_get_level_string(log_level_t level) {
             return " [DEBUG]";
         case LOG_INFO:
             return " [INFO]";
-        case LOG_OUTPUT:
-            return " [OUTPUT]";
         case LOG_WARNING:
             return " [WARNING]";
         case LOG_ERROR:

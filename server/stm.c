@@ -13,7 +13,7 @@ stm_init(struct state_machine *stm) {
     // verificamos que los estados son correlativos, y que están bien asignados.
     for(unsigned i = 0 ; i <= stm->max_state; i++) {
         if(i != stm->states[i].state) {
-            logf(LOG_ERROR, "State don't match: %d != %d", i, stm->states[i].state);
+            logf(LOG_FATAL, "State don't match: %d != %d", i, stm->states[i].state);
             abort();
         }
     }
@@ -21,7 +21,7 @@ stm_init(struct state_machine *stm) {
     if(stm->initial < stm->max_state) {
         stm->current = NULL;
     } else {
-        logf(LOG_ERROR, "Invalid initial state: %d", stm->initial);
+        logf(LOG_FATAL, "Invalid initial state: %d", stm->initial);
         abort();
     }
 }
@@ -44,7 +44,7 @@ inline static
 void jump(struct state_machine *stm, unsigned next, struct selector_key *key) {
 
     if(next > stm->max_state) {
-        logf(LOG_ERROR, "Invalid state: %d", next);
+        logf(LOG_FATAL, "Invalid state: %d", next);
         abort();
     }
     if(stm->current != stm->states + next) {
@@ -68,7 +68,7 @@ stm_handler_read(struct state_machine *stm, struct selector_key *key) {
     handle_first(stm, key);
     // Si no hay una funcion de lectura definida para el estado actual, aborta
     if(stm->current->on_read_ready == 0) {
-        logf(LOG_ERROR, "Current state %d does not support read", stm->current->state);
+        logf(LOG_FATAL, "Current state %d does not support read", stm->current->state);
         abort();
     }
     // Ejecuta la funcion de lectura del estado actual
@@ -86,7 +86,7 @@ stm_handler_write(struct state_machine *stm, struct selector_key *key) {
     handle_first(stm, key);
     // Si no hay una funcion de escritura definida para el estado actual, aborta
     if(stm->current->on_write_ready == 0) {
-        logf(LOG_ERROR, "Current state %d does not support write", stm->current->state);
+        logf(LOG_FATAL, "Current state %d does not support write", stm->current->state);
         abort();
     }
     // Ejecuta la funcion de escritura del estado actual
@@ -102,7 +102,7 @@ unsigned
 stm_handler_block(struct state_machine *stm, struct selector_key *key) {
     handle_first(stm, key);
     if(stm->current->on_block_ready == 0) {
-        logf(LOG_ERROR, "Current state %d does not support block", stm->current->state);
+        logf(LOG_FATAL, "Current state %d does not support block", stm->current->state);
         abort();
     }
     const unsigned int ret = stm->current->on_block_ready(key);

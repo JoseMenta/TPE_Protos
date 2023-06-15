@@ -17,12 +17,12 @@ email* read_maildir(const char* maildir_path, size_t* size){
     email* ans = NULL;
     DIR* mail_dir = NULL;
     if(maildir_path == NULL){
-        log(LOG_ERROR, "Maildir_path was null");
+        log(LOG_FATAL, "Maildir_path is null");
         goto fail;
     }
     mail_dir = opendir(maildir_path);
     if(mail_dir == NULL){
-        log(LOG_ERROR, "Error opening maildir_path");
+        log(LOG_FATAL, "An error occurred opening maildir_path");
         goto fail;
     }
     struct dirent* dirent = NULL;

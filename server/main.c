@@ -222,14 +222,14 @@ int main(int argc, const char* argv[]) {
     
     finally:
     if(ss != SELECTOR_SUCCESS) { //si terminamos con un error del selector
-        logf(LOG_ERROR, "'%s': '%s'", (err_msg == NULL) ? "": err_msg,
+        logf(LOG_FATAL, "'%s': '%s'", (err_msg == NULL) ? "": err_msg,
              ss == SELECTOR_IO
              ? strerror(errno)
              : selector_error(ss));
 
         ret = 2;
     } else if(err_msg) { //si tuvimos un error anterior
-        logf(LOG_ERROR, "An error occurred: '%s'", err_msg);
+        logf(LOG_FATAL, "An error occurred: '%s'", err_msg);
         ret = 1;
     }
     if(selector != NULL) { //si pudimos obtener el selector, lo liberamos

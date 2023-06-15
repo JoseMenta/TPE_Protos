@@ -11,13 +11,13 @@
 parserADT parser_init(const parser_definition * def) {
     parserADT p = calloc(1, sizeof(parserCDT));
     if(p == NULL || errno == ENOMEM) {
-        log(LOG_ERROR, "Error creating parserADT");
+        log(LOG_FATAL, "Error creating parserADT");
         return NULL;
     }
     if (def->init != NULL) {
         p->data = def->init();
         if(p->data == NULL) {
-            log(LOG_ERROR, "Error initializing parser data structure");
+            log(LOG_FATAL, "Error initializing parser data structure");
             free(p);
             return NULL;
         }

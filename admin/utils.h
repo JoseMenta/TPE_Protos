@@ -30,7 +30,7 @@ struct status_client{
     const char * version;
     const char * name_protocol;
     char ** command_names;
-    char list_commands[MAX_COMMANDS][1024];
+    char list_commands[MAX_COMMANDS][DGRAM_SIZE];
     int count_commans;
 };
 

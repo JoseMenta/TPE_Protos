@@ -231,7 +231,7 @@ void logger_get_bufstart_and_maxlength(char** bufstartVar, size_t* maxlenVar) {
 
 int logger_post_print(int written, size_t maxlen) {
     if (written < 0) {
-        fprintf(stderr, "Error: snprintf(): %s\n", strerror(errno));
+        fprintf(stderr, "Error: snprintf(): '%s'\n", strerror(errno));
         return -1;
     }
 

@@ -495,7 +495,7 @@ unsigned int read_request(struct selector_key* key){
 //                return FINISHED;
 //            }
             pop3_command command = get_command(state->cmd);
-            logf(LOG_DEBUG,"Reading request for cmd: %s", command>=0 ? commands[command].name : "invalid command");
+            logf(LOG_DEBUG,"Reading request for cmd: '%s'", command>=0 ? commands[command].name : "invalid command");
             state->command = command;
             get_pop3_arg(state->pop3_parser,state->arg,MAX_ARG);
 //            pop3_command command = get_command(parser_command);
@@ -515,7 +515,7 @@ unsigned int read_request(struct selector_key* key){
                 state->command = ERROR_COMMAND;
             }
             if(!check_command_for_protocol_state(state->pop3_protocol_state, command)){
-                logf(LOG_ERROR,"Command %s not allowed in this state",commands[command]);
+                logf(LOG_ERROR,"Command '%s' not allowed in this state",commands[command]);
                 state->command = ERROR_COMMAND;
             }
             parser_reset(state->pop3_parser);
@@ -584,7 +584,7 @@ unsigned int write_response(struct selector_key* key){
 //                    return FINISHED;
 //                }
                 pop3_command command = get_command(state->cmd);
-                logf(LOG_DEBUG,"Writing request for cmd: %s", commands[command]);
+                logf(LOG_DEBUG,"Writing request for cmd: '%s'", commands[command]);
                 state->command = command;
                 get_pop3_arg(state->pop3_parser,state->arg,MAX_ARG);
 //                state->arg = get_pop3_arg(parser_data);
@@ -598,7 +598,7 @@ unsigned int write_response(struct selector_key* key){
                     log(LOG_ERROR, "Unknown command");
                 }
                 if(!check_command_for_protocol_state(state->pop3_protocol_state, command)){
-                    logf(LOG_ERROR,"Command %s not allowed in this state",commands[command]);
+                    logf(LOG_ERROR,"Command '%s' not allowed in this state",commands[command]);
                     state->command = ERROR_COMMAND;
                 }
                 parser_reset(state->pop3_parser);

@@ -49,14 +49,14 @@ int main(int argc, const char* argv[]) {
 
     //Guarda las configuraciones para el selector
     if(0 != (ss = selector_init(&conf))) {
-        fprintf(stderr, "Cannot initialize selector: %s\n", ss == SELECTOR_IO ? strerror(errno) : selector_error(ss));
+        fprintf(stderr, "Cannot initialize selector: '%s'\n", ss == SELECTOR_IO ? strerror(errno) : selector_error(ss));
         return 2;
     }
 
     //usando las configuraciones del init, crea un nuevo selector con capacidad para 1024 FD's inicialmente
     selector = selector_new(INITIAL_FDS);
     if(selector == NULL) {
-        fprintf(stderr, "Unable to create selector: %s\n", strerror(errno));
+        fprintf(stderr, "Unable to create selector: '%s'\n", strerror(errno));
         return 1;
     }
 
@@ -222,14 +222,14 @@ int main(int argc, const char* argv[]) {
     
     finally:
     if(ss != SELECTOR_SUCCESS) { //si terminamos con un error del selector
-        logf(LOG_ERROR, "%s: %s", (err_msg == NULL) ? "": err_msg,
+        logf(LOG_ERROR, "'%s': '%s'", (err_msg == NULL) ? "": err_msg,
              ss == SELECTOR_IO
              ? strerror(errno)
              : selector_error(ss));
 
         ret = 2;
     } else if(err_msg) { //si tuvimos un error anterior
-        logf(LOG_ERROR, "An error occurred: %s", err_msg);
+        logf(LOG_ERROR, "An error occurred: '%s'", err_msg);
         ret = 1;
     }
     if(selector != NULL) { //si pudimos obtener el selector, lo liberamos

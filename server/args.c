@@ -19,7 +19,7 @@ port(const char *s) {
      if (end == s|| '\0' != *end
         || ((LONG_MIN == sl || LONG_MAX == sl) && ERANGE == errno)
         || sl < 0 || sl > USHRT_MAX) {
-         fprintf(stderr, "port should in in the range of 1-65536: %s\n", s);
+         fprintf(stderr, "Port should be in the range of 1-65536: %s\n", s);
          exit(1);
      }
      return (unsigned short)sl;
@@ -35,7 +35,7 @@ static char * path(const char * path){
 static void user(char *s, char ** user_name, char ** user_pass) {
     char *p = strchr(s, ':');
     if(p == NULL) {
-        fprintf(stderr, "password not found for '%s'\n", s);
+        fprintf(stderr, "Password not found for user '%s'\n", s);
         exit(1);
     } else {
         *p = 0;
@@ -113,14 +113,14 @@ parse_args(const int argc, const char **argv, struct pop3args *args) {
                 args->maildir_path = path(optarg);
                 break;
             default:
-                fprintf(stderr, "unknown argument %c.\n", c);
+                fprintf(stderr, "Unknown argument: '%c'.\n", c);
                 exit(1);
         }
     }
     if (optind < argc) {
-        fprintf(stderr, "argument not accepted: ");
+        fprintf(stderr, "Argument not accepted: ");
         while (optind < argc) {
-            fprintf(stderr, "%s ", argv[optind++]);
+            fprintf(stderr, "'%s' ", argv[optind++]);
         }
         fprintf(stderr, "\n");
         exit(1);

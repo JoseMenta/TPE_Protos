@@ -32,6 +32,7 @@ email* read_maildir(const char* maildir_path, size_t* size){
             struct stat file_stat;
             //TODO: probar esto, me ahorra hacer la concatenacion para tener todos los paths
             if(fstatat(dirfd(mail_dir),dirent->d_name,&file_stat,0)==-1){
+                log(LOG_ERROR, "An error occurred when using fstatat");
                 goto fail;
             }
             if(S_ISREG(file_stat.st_mode)){
@@ -40,6 +41,7 @@ email* read_maildir(const char* maildir_path, size_t* size){
                     void* aux = ans;
                     ans = realloc(ans,(ans_size+CHUNK_SIZE)*sizeof (email));
                     if(ans==NULL || errno == ENOMEM){
+                        log(LOG_ERROR, "Error when using realloc for normal file");
                         ans = aux; //tengo que liberar la memoria original
                         goto fail;
                     }
@@ -67,6 +69,7 @@ email* read_maildir(const char* maildir_path, size_t* size){
 }
 void free_emails(email* emails, size_t size){
     if(emails == NULL){
+        log(LOG_DEBUG, "Trying to free emails but it was null");
         return;
     }
     free(emails);

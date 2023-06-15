@@ -22,12 +22,12 @@ typedef enum {
     LOG_WARNING,
     LOG_ERROR,
     LOG_FATAL
-} TLogLevel;
+} log_level_t;
 
 #define MIN_LOG_LEVEL LOG_DEBUG
 #define MAX_LOG_LEVEL LOG_FATAL
 
-const char* loggerGetLevelString(TLogLevel level);
+const char* logger_get_level_string(log_level_t level);
 
 #ifdef DISABLE_LOGGER
 #define loggerInit(selector, logFile, logStream)
@@ -45,55 +45,55 @@ const char* loggerGetLevelString(TLogLevel level);
  logStreamParam puede ser stdout para también imprimir lo que se loggea a la consola
 
  */
-int loggerInit(fd_selector selectorParam, const char* logFile, FILE* logStreamParam);
+int logger_init(fd_selector selector_param, const char* log_file, FILE* log_stream_param);
 
 /*
  Termina y envia los logs restantes
  */
-int loggerFinalize();
+int logger_finalize();
 
 /*
  Setea a que nivel se puede loggear (debug, info, error, etc)
  */
-void loggerSetLevel(TLogLevel level);
+void logger_set_level(log_level_t level);
 
 /*
  Se fija si esta permitido loggear a ese nivel
  */
-int loggerIsEnabledFor(TLogLevel level);
+int logger_is_enabled_for(log_level_t level);
 
 /*
  Hace lugar en el buffer para por lo menos una linea mas de logging
  Ojo, tiene tamaño fijo
  */
-void loggerPrePrint();
+void logger_pre_print();
 
-void loggerGetBufstartAndMaxlength(char** bufstartVar, size_t* maxlenVar);
+void logger_get_bufstart_and_maxlength(char** buf_start_var, size_t* max_len_var);
 
 /*
  Escribe en el logStream
  Actualiza el current del buffer e intenta flushear al archivo de log
  */
-int loggerPostPrint(int written, size_t maxlen);
+int logger_post_print(int written, size_t max_len);
 
 /*
  Macro a utilizar para loggear
  Le pasas el nivel y lo que queres escribir, se fija si podes, hace lugar
  calcula la hora y escribe la hora seguido del log
  */
-#define logf(level, format, ...)                                                                                                      \
-    if (loggerIsEnabledFor(level)) {                                                                                                  \
-        loggerPrePrint();                                                                                                             \
-        time_t loginternal_time = time(NULL);                                                                                         \
-        struct tm loginternal_tm = *localtime(&loginternal_time);                                                                     \
-        size_t loginternal_maxlen;                                                                                                    \
-        char* loginternal_bufstart;                                                                                                   \
-        loggerGetBufstartAndMaxlength(&loginternal_bufstart, &loginternal_maxlen);                                                    \
-        int loginternal_written = snprintf(loginternal_bufstart, loginternal_maxlen, "[%04d-%02d-%02d %02d:%02d:%02d]%s\t" format "\n", \
-                                           loginternal_tm.tm_year + 1900, loginternal_tm.tm_mday, loginternal_tm.tm_mon + 1,          \
-                                           loginternal_tm.tm_hour, loginternal_tm.tm_min, loginternal_tm.tm_sec,                      \
-                                           level == LOG_OUTPUT ? "" : loggerGetLevelString(level), ##__VA_ARGS__);                      \
-        loggerPostPrint(loginternal_written, loginternal_maxlen);                                                                     \
+#define logf(level, format, ...)                                                                                                           \
+    if (logger_is_enabled_for(level)) {                                                                                                    \
+        logger_pre_print();                                                                                                                \
+        time_t loginternal_time = time(NULL);                                                                                              \
+        struct tm loginternal_tm = *localtime(&loginternal_time);                                                                          \
+        size_t loginternal_maxlen;                                                                                                         \
+        char* loginternal_bufstart;                                                                                                        \
+        logger_get_bufstart_and_maxlength(&loginternal_bufstart, &loginternal_maxlen);                                                     \
+        int loginternal_written = snprintf(loginternal_bufstart, loginternal_maxlen, "[%04d-%02d-%02d %02d:%02d:%02d]%s\t" format "\n",    \
+                                           loginternal_tm.tm_year + 1900, loginternal_tm.tm_mday, loginternal_tm.tm_mon + 1,               \
+                                           loginternal_tm.tm_hour, loginternal_tm.tm_min, loginternal_tm.tm_sec,                           \
+                                           level == LOG_OUTPUT ? "" : logger_get_level_string(level), ##__VA_ARGS__);                      \
+        logger_post_print(loginternal_written, loginternal_maxlen);                                                                          \
     }
 
 // Para loggear sin formato

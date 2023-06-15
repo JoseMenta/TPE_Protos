@@ -60,9 +60,9 @@ int main(int argc, const char* argv[]) {
         return 1;
     }
 
-    loggerInit(selector, "", NULL);
-    loggerSetLevel(LOG_DEBUG);
-    log(LOG_INFO, "initializing logger");
+    logger_init(selector, "", stdout);
+    logger_set_level(LOG_DEBUG);
+    log(LOG_INFO, "Initializing logger");
 
     struct pop3args* pop3_args = malloc(sizeof(struct pop3args));
     if(pop3_args == NULL || errno == ENOMEM){
@@ -77,6 +77,7 @@ int main(int argc, const char* argv[]) {
     setvbuf(stdout, NULL, _IONBF, 0);
     // Por defecto, el servidor escucha en el puerto que se pasa pero por defecto es el 1100
     unsigned port = pop3_args->pop3_port;
+    fprintf(stdout, "Listening on port %d\n", port);
 
     //No tenemos nada que leer de entrada estandar
     log(LOG_DEBUG, "Closing STDIN fd");
@@ -198,7 +199,7 @@ int main(int argc, const char* argv[]) {
     ss = selector_register(selector, server_6, &pop3_handler,
                            OP_READ, pop3_args);
     if(ss != SELECTOR_SUCCESS) {
-        err_msg = "registering fd for ipv6";
+        err_msg = "Unable to register fd for IPv6 socket";
         goto finally;
     }
 
@@ -207,7 +208,7 @@ int main(int argc, const char* argv[]) {
         ss = selector_select(selector);
         if(ss != SELECTOR_SUCCESS) {
             //Hubo un error mientras funcionaba el selector
-            err_msg = "serving";
+            err_msg = "An error occurred while selecting";
             goto finally;
         }
     }
@@ -216,34 +217,40 @@ int main(int argc, const char* argv[]) {
 
     //Si llegamos hasta aca sin errores, solo hay que decir que termina el servidor
     if(err_msg == NULL) {
-        err_msg = "closing";
+        log(LOG_INFO, "Server terminated normally");
     }
     
     finally:
     if(ss != SELECTOR_SUCCESS) { //si terminamos con un error del selector
-        logf(LOG_ERROR, "%s: %s\n", (err_msg == NULL) ? "": err_msg,
+        logf(LOG_ERROR, "%s: %s", (err_msg == NULL) ? "": err_msg,
              ss == SELECTOR_IO
              ? strerror(errno)
              : selector_error(ss));
 
         ret = 2;
     } else if(err_msg) { //si tuvimos un error anterior
-        perror(err_msg);
+        logf(LOG_ERROR, "An error occurred: %s", err_msg);
         ret = 1;
     }
     if(selector != NULL) { //si pudimos obtener el selector, lo liberamos
+        log(LOG_INFO, "Destroying selector");
         selector_destroy(selector);
     }
+    log(LOG_INFO, "Closing selector");
     selector_close();
 
     //Si pudimos obtener el socket, lo cerramos
     if(server >= 0) {
+        log(LOG_INFO, "Closing IPv4 socket");
         close(server);
     }
 
     if(server_6 >= 0){
+        log(LOG_INFO, "Closing IPv6 socket");
         close(server_6);
     }
 
+    logf(LOG_INFO, "Server terminated with code %d", ret);
+    logger_finalize();
     return ret;
 }

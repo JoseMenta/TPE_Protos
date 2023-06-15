@@ -17,6 +17,7 @@ parserADT parser_init(const parser_definition * def) {
     if (def->init != NULL) {
         p->data = def->init();
         if(p->data == NULL) {
+            log(LOG_ERROR, "Error initializing parser data structure");
             free(p);
             return NULL;
         }

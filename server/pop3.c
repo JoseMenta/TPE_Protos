@@ -320,7 +320,7 @@ void pop3_passive_accept(struct selector_key* key) {
         goto fail;
     }
     state->connection_fd = client_fd;
-    logf(LOG_INFO, "registering client with fd %d", client_fd);
+    logf(LOG_INFO, "Registering client with fd %d", client_fd);
     //registramos en el selector al nuevo socket, y nos interesamos en escribir para mandarle el mensaje de bienvenida
     if(selector_register(key->s,client_fd,&handler,OP_WRITE,state)!= SELECTOR_SUCCESS){
         log(LOG_ERROR, "Failed to register socket")
@@ -383,6 +383,7 @@ void pop3_destroy(pop3* state){
     if(state == NULL){
         return;
     }
+    logf(LOG_INFO, "Closing connection with fd %d", state->connection_fd);
     //Si hay campos adentro que liberar, hacerlo aca
     parser_destroy(state->pop3_parser);
     parser_destroy(state->byte_stuffing_parser);
@@ -505,8 +506,12 @@ unsigned int read_request(struct selector_key* key){
 //                return FINISHED;
 //            }
 //            free((void*)parser_data);
-            if(parser == PARSER_ERROR || command == ERROR_COMMAND || !commands[command].check(state->arg)){
+            if(parser == PARSER_ERROR || command == ERROR_COMMAND){
                 log(LOG_ERROR, "Unknown command");
+                state->command = ERROR_COMMAND;
+            }
+            if(!commands[command].check(state->arg)){
+                log(LOG_ERROR, "Bad arguments");
                 state->command = ERROR_COMMAND;
             }
             if(!check_command_for_protocol_state(state->pop3_protocol_state, command)){
@@ -613,9 +618,9 @@ unsigned int write_response(struct selector_key* key){
 }
 
 void finish_connection(const unsigned state, struct selector_key *key){
-    log(LOG_DEBUG, "Finishing connection");
     pop3 * data = GET_POP3(key);
     if(data->pop3_protocol_state == TRANSACTION){
+        logf(LOG_INFO, "Finishing connection of user '%s'", data->user_s->name);
         data->user_s->logged=false;
     }
     if(data->pop3_protocol_state == TRANSACTION && data->state_data.transaction.file_opened){
@@ -749,8 +754,10 @@ int pass_action(pop3* state){
     char * msj = PASS_INVALID_MESSAGE;
     if(state->state_data.authorization.pass != NULL && strcmp(state->arg, state->state_data.authorization.pass) == 0){
         if(state->user_s->logged){
+            logf(LOG_INFO,"User '%s' already logged", state->state_data.authorization.user)
             msj = USER_LOGGED;
         }else{
+            logf(LOG_INFO,"User '%s' logged in", state->state_data.authorization.user)
             msj = PASS_VALID_MESSAGE;
             state->user_s->logged = true;
             state->pop3_protocol_state = TRANSACTION;
@@ -954,7 +961,7 @@ int retr_action(pop3* state){
             if(PARSER_ACTION == parser_feed(state->byte_stuffing_parser, file_ptr[file])) {
                 //tengo que hacer byte stuffing
                 //vi un punto al inicio de una linea nueva
-                logf(LOG_DEBUG,"Doing byte stuffing in write %d and file %d", write, file);
+                logf(LOG_DEBUG,"Doing byte stuffing in file %ld and position %ld ", state->state_data.transaction.arg, file);
                 write_ptr[write++] = '.'; //agrego un punto al principio
             }
             write_ptr[write] = file_ptr[file];
@@ -1057,7 +1064,7 @@ int dele_action(pop3* state){
     long index = strtol(state->arg, NULL,10);
     //REvisamos si se puede eliminar
     if( index <= state->emails_count &&  index>0 &&  !state->emails[index-1].deleted){
-        logf(LOG_INFO, "Deleting email with index %d", index-1);
+        logf(LOG_INFO, "Marking to delete email with index %d", index);
         state->emails[index-1].deleted = true;
         msj_ret = OK_MESSSAGE;
     }
@@ -1073,6 +1080,7 @@ int dele_action(pop3* state){
 int rset_action(pop3* state){
     //computamos el total de size
     for(int i=0; i<state->emails_count ; i++){
+        logf(LOG_DEBUG,"Unmarking to delete file %d",i+1);
         state->emails[i].deleted = false;
     }
     if(try_write(OK_MESSSAGE, &(state->info_write_buff)) == TRY_PENDING){
@@ -1094,14 +1102,16 @@ int noop_action(pop3* state){
 int quit_action(pop3* state){
     state->final_error_message = QUIT_MESSAGE;
     if(state->pop3_protocol_state == AUTHORIZATION){
-        log(LOG_ERROR, "Error setting interest");
+        logf(LOG_INFO, "Quitting in Authorization state for fd %d", state->connection_fd);
         return ERROR;//cierro la conexion
     }
+    logf(LOG_INFO, "Finishing connection of user '%s'", state->user_s->name);
     state->user_s->logged=false;
     //Estamos en transaction
     //tengo que eliminar todos los archivos que marcaron para eliminar
     int dir_fd = open(state->path_to_user_maildir,O_DIRECTORY);
     if(dir_fd == -1){
+        log(LOG_ERROR,"Error opening mail directory to delete mails");
         return FINISHED;
     }
     for(size_t i = 0; i<state->emails_count; i++){

@@ -5,7 +5,7 @@
 #include <string.h>
 #include <stdlib.h>
 
-#define SEPARATOR_STRING " "
+#define SEPARATOR_STRING "\n"
 
 void parse_resp(char * buff, client_info version){
     char *token;

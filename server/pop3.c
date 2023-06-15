@@ -38,6 +38,10 @@
 #define NO_MAILDIR_MESSAGE "-ERR Could not open maildir\r\n"
 #define UNKNOWN_ERROR_MESSAGE "-ERR Closing connection\r\n"
 
+unsigned long historic_connections = 0;
+unsigned long current_connections = 0;
+unsigned long bytes_sent = 0;
+
 //Esto es lo que vamos a pasar en void* data del selector
 //Vamos a agregar lo que necesitemos, como un array con todos los mails que tiene el usuario
 
@@ -327,6 +331,8 @@ void pop3_passive_accept(struct selector_key* key) {
         goto fail;
     }
     //Si tenemos metricas, cambiarlas aca
+    current_connections++;
+    historic_connections++;
 
     return;
 
@@ -392,6 +398,7 @@ void pop3_destroy(pop3* state){
         free(state->path_to_user_maildir);
     }
     free(state);
+    current_connections --; //se llama cuando se libera el estado de conexion (entonces termina la conexion)
 }
 /*
  * --------------------------------------------------------------------------------------
@@ -444,6 +451,7 @@ unsigned hello_write(struct selector_key* key){
     size_t  max = 0;
     uint8_t* ptr = buffer_read_ptr(&(state->info_write_buff),&max);
     ssize_t sent_count = send(key->fd,ptr,max,MSG_NOSIGNAL);
+    bytes_sent += sent_count;
 
     if(sent_count == -1){
         log(LOG_ERROR,"Error writing at socket");
@@ -555,6 +563,7 @@ unsigned int write_response(struct selector_key* key){
     size_t  max = 0;
     uint8_t* ptr = buffer_read_ptr(&(state->info_write_buff),&max);
     ssize_t sent_count = send(key->fd,ptr,max,MSG_NOSIGNAL);
+    bytes_sent += sent_count;
 
     if(sent_count == -1){
         log(LOG_ERROR, "Error writing in socket");
@@ -719,6 +728,7 @@ unsigned finish_error(struct  selector_key* key){
     size_t  max = 0;
     uint8_t* ptr = buffer_read_ptr(&(state->info_write_buff),&max);
     ssize_t sent_count = send(key->fd,ptr,max,MSG_NOSIGNAL);
+    bytes_sent += sent_count;
 
     if(sent_count == -1){
         return FINISHED; //para que vaya a .on_departure, nunca deberia llegar a hello

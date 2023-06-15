@@ -5,12 +5,13 @@
 #include <string.h>
 #include <stdlib.h>
 
+#define SEPARATOR_STRING " "
 
 void parse_resp(char * buff, client_info version){
     char *token;
     bool status = true;
 
-    token = strtok(buff, "\n");
+    token = strtok(buff, SEPARATOR_STRING);
 
     for(int i=0; token != NULL && i<MAX_LINES_RESP;  i++) {
         switch (i) {
@@ -21,7 +22,8 @@ void parse_resp(char * buff, client_info version){
                 status = (strcmp(token, version->version) == 0) && status;
                 break;
             case 2:
-                printf("%s -> ", version->command_names[atoi(token)]);
+                printf("%s -> ", version->command_names[version->list_command[atoi(token)].name_command]);
+                version->list_command[atoi(token)].timeout=false;
                 break;
             case 3:
                 status = (strcmp(token, OK_TEXT) == 0) && status;
@@ -36,6 +38,6 @@ void parse_resp(char * buff, client_info version){
                 printf("- %s\n", token);
                 break;
         }
-        token = strtok(NULL, "\n");
+        token = strtok(NULL, SEPARATOR_STRING);
     }
 }

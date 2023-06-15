@@ -2,6 +2,8 @@
 #ifndef TP_UTILS_H
 #define TP_UTILS_H
 
+#include <stdbool.h>
+
 #define MAX_COMMANDS 50
 #define DGRAM_SIZE 1024
 #define MAX_LINES 10
@@ -23,6 +25,11 @@ typedef enum{
     STAT_BYTES_TRANSFERRED,
 }admin_command;
 
+struct command{
+    char request[DGRAM_SIZE];
+    bool timeout;
+    int name_command;
+};
 
 typedef struct command * commands;
 
@@ -30,7 +37,7 @@ struct status_client{
     const char * version;
     const char * name_protocol;
     char ** command_names;
-    char list_commands[MAX_COMMANDS][DGRAM_SIZE];
+    struct command list_command[MAX_COMMANDS];
     int count_commans;
 };
 

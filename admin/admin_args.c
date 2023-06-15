@@ -53,7 +53,9 @@ void parse_args(int argc, const char **argv, client_info client) {
                     nusers++;
                     snprintf(buff, DGRAM_SIZE, "%s\n%s\n%d\n%s\n%s\n%s\n%s\n\n",
                                  client->name_protocol, client->version, client->count_commans, token, client->command_names[ADD_USER], user_name, user_pass);
-                    strcpy(client->list_commands[client->count_commans], buff);
+                    strcpy(client->list_command[client->count_commans].request, buff);
+                    client->list_command[client->count_commans].timeout=true;
+                    client->list_command[client->count_commans].name_command = ADD_USER;
                     client->count_commans++;
                 }
                 break;
@@ -61,56 +63,74 @@ void parse_args(int argc, const char **argv, client_info client) {
                 user(optarg, &user_name, &user_pass);
                 snprintf(buff, DGRAM_SIZE, "%s\n%s\n%d\n%s\n%s\n%s\n%s\n\n",
                          client->name_protocol, client->version, client->count_commans, token, client->command_names[CHANGE_PASS], user_name, user_pass);
-                strcpy(client->list_commands[client->count_commans], buff);
+                strcpy(client->list_command[client->count_commans].request, buff);
+                client->list_command[client->count_commans].timeout=true;
+                client->list_command[client->count_commans].name_command = CHANGE_PASS;
                 client->count_commans++;
                 break;
             case 'R':
                 user(optarg, &user_name, &user_pass);
                 snprintf(buff, DGRAM_SIZE, "%s\n%s\n%d\n%s\n%s\n%s\n%s\n\n",
                          client->name_protocol, client->version, client->count_commans, token, client->command_names[REMOVE_USER], user_name, user_pass);
-                strcpy(client->list_commands[client->count_commans], buff);
+                strcpy(client->list_command[client->count_commans].request, buff);
+                client->list_command[client->count_commans].timeout=true;
+                client->list_command[client->count_commans].name_command = REMOVE_USER;
                 client->count_commans++;
                 break;
             case 'm':
                 snprintf(buff, DGRAM_SIZE, "%s\n%s\n%d\n%s\n%s\n\n",
                          client->name_protocol, client->version, client->count_commans, token, client->command_names[GET_MAX_MAILS]);
-                strcpy(client->list_commands[client->count_commans], buff);
+                strcpy(client->list_command[client->count_commans].request, buff);
+                client->list_command[client->count_commans].timeout=true;
+                client->list_command[client->count_commans].name_command = GET_MAX_MAILS;
                 client->count_commans++;
                 break;
             case 'M':
                 snprintf(buff, DGRAM_SIZE, "%s\n%s\n%d\n%s\n%s\n%d\n\n",
                          client->name_protocol, client->version, client->count_commans, token, client->command_names[SET_MAX_MAILS], number( optarg));
-                strcpy(client->list_commands[client->count_commans], buff);
+                strcpy(client->list_command[client->count_commans].request, buff);
+                client->list_command[client->count_commans].timeout=true;
+                client->list_command[client->count_commans].name_command = SET_MAX_MAILS;
                 client->count_commans++;
                 break;
             case 'd':
                 snprintf(buff, DGRAM_SIZE, "%s\n%s\n%d\n%s\n%s\n\n",
                          client->name_protocol, client->version, client->count_commans, token, client->command_names[GET_MAILDIR]);
-                strcpy(client->list_commands[client->count_commans], buff);
+                strcpy(client->list_command[client->count_commans].request, buff);
+                client->list_command[client->count_commans].timeout=true;
+                client->list_command[client->count_commans].name_command = GET_MAILDIR;
                 client->count_commans++;
                 break;
             case 'D':
                 snprintf(buff, DGRAM_SIZE, "%s\n%s\n%d\n%s\n%s\n%s\n\n",
                          client->name_protocol, client->version, client->count_commans, token, client->command_names[SET_MAILDIR], optarg);
-                strcpy(client->list_commands[client->count_commans], buff);
+                strcpy(client->list_command[client->count_commans].request, buff);
+                client->list_command[client->count_commans].timeout=true;
+                client->list_command[client->count_commans].name_command = SET_MAILDIR;
                 client->count_commans++;
                 break;
             case 'p':
                 snprintf(buff, DGRAM_SIZE, "%s\n%s\n%d\n%s\n%s\n\n",
                          client->name_protocol, client->version, client->count_commans, token, client->command_names[STAT_PREVIOUS_CONNECTIONS]);
-                strcpy(client->list_commands[client->count_commans], buff);
+                strcpy(client->list_command[client->count_commans].request, buff);
+                client->list_command[client->count_commans].timeout=true;
+                client->list_command[client->count_commans].name_command = STAT_PREVIOUS_CONNECTIONS;
                 client->count_commans++;
                 break;
             case 'c':
                 snprintf(buff, DGRAM_SIZE, "%s\n%s\n%d\n%s\n%s\n\n",
                          client->name_protocol, client->version, client->count_commans, token, client->command_names[STAT_CURRENT_CONNECTIONS]);
-                strcpy(client->list_commands[client->count_commans], buff);
+                strcpy(client->list_command[client->count_commans].request, buff);
+                client->list_command[client->count_commans].timeout=true;
+                client->list_command[client->count_commans].name_command = STAT_CURRENT_CONNECTIONS;
                 client->count_commans++;
                 break;
             case 'b':
                 snprintf(buff, DGRAM_SIZE, "%s\n%s\n%d\n%s\n%s\n\n",
                          client->name_protocol, client->version, client->count_commans, token, client->command_names[STAT_BYTES_TRANSFERRED]);
-                strcpy(client->list_commands[client->count_commans], buff);
+                strcpy(client->list_command[client->count_commans].request, buff);
+                client->list_command[client->count_commans].timeout=true;
+                client->list_command[client->count_commans].name_command = STAT_BYTES_TRANSFERRED;
                 client->count_commans++;
                 break;
             default:

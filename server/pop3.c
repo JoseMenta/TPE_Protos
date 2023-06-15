@@ -741,8 +741,7 @@ int pass_action(pop3* state){
             state->user_s->logged = true;
             state->pop3_protocol_state = TRANSACTION;
             state->path_to_user_maildir = usersADT_get_user_mail_path(state->pop3_args->users,state->pop3_args->maildir_path, state->state_data.authorization.user);
-            //TODO: Setear el max para el mails con cliente
-            size_t mails_max = 20;
+            size_t mails_max = state->pop3_args->max_mails;
             state->emails = read_maildir(state->path_to_user_maildir,&mails_max);
             if(state->emails == NULL){
                 //TODO: ver de imprimir un error y mantener la conexion

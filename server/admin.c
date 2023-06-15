@@ -269,7 +269,7 @@ void change_pass_action(int socket, request* req,struct pop3args* args, struct s
         return;
     }
 
-    if(usersADT_update_pass(args->users,req->args[0],req->args[1])!=0){
+    if(usersADT_update_pass(args->users,req->args[0],req->args[1])!=true){
         send_response(socket,GENERAL_ERROR,"No fue posible cambiar la contraseña del usuario",req,client_addr,client_len);
         return;
     }

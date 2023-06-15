@@ -52,7 +52,7 @@ int main(int argc, const char* argv[]){
     socklen_t fromAddrLen = sizeof(fromAddr);
 
     struct timeval tv;
-    tv.tv_sec = 2;
+    tv.tv_sec = 5;
     tv.tv_usec = 100000;
     if(setsockopt(server, SOL_SOCKET, SO_RCVTIMEO, &tv,sizeof(tv)) < 0) {
         printf("Error timeout");

@@ -110,6 +110,8 @@ int main(int argc, const char* argv[]) {
     //Devuelve el fd del socket (pasivo)
     const int server = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     const int server_6 = socket(AF_INET6,SOCK_STREAM,IPPROTO_TCP);
+
+    log(LOG_DEBUG, "Opening ADMIN socket");
     const int admin = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     //Si hubo algun error al abrir el socket
     if(server < 0) {
@@ -138,6 +140,7 @@ int main(int argc, const char* argv[]) {
     log(LOG_DEBUG, "Setting IPV6_V6ONLY and SO_REUSEADDR on IPv6 socket");
     setsockopt(server_6, IPPROTO_IPV6, IPV6_V6ONLY, &(int){ 1 }, sizeof(int));
     setsockopt(server_6, SOL_SOCKET, SO_REUSEADDR, &(int){ 1 }, sizeof(int));
+    log(LOG_DEBUG, "Setting SO_REUSEADDR on IPv4 socket");
     setsockopt(admin, SOL_SOCKET, SO_REUSEADDR, &(int){ 1 }, sizeof(int));
 
     //asigna la direccion IP y el puerto al fd server
@@ -154,6 +157,7 @@ int main(int argc, const char* argv[]) {
         goto finally;
     }
 
+    log(LOG_INFO, "Binding socket for ADMIN");
     if(bind(admin, (struct sockaddr*) &admin_addr, sizeof(admin_addr)) < 0) {
         err_msg = "unable to bind socket for admin in ipv4";
         goto finally;
@@ -195,6 +199,7 @@ int main(int argc, const char* argv[]) {
         goto finally;
     }
 
+    log(LOG_INFO, "Setting ADMIN socket as non-blocking");
     if(selector_fd_set_nio(admin) == -1){
         err_msg = "getting server socket flags for admin in ipv4";
         goto finally;
@@ -224,6 +229,7 @@ int main(int argc, const char* argv[]) {
         goto finally;
     }
 
+    log(LOG_INFO, "Setting IPv6 socket as passive");
     ss = selector_register(selector, server_6, &pop3_handler,
                            OP_READ, pop3_args);
     if(ss != SELECTOR_SUCCESS) {
@@ -231,6 +237,7 @@ int main(int argc, const char* argv[]) {
         goto finally;
     }
 
+    log(LOG_INFO, "Setting ADMIN socket as passive");
     ss = selector_register(selector, admin, &admin_handler,
                            OP_READ, pop3_args);
     if(ss != SELECTOR_SUCCESS) {
@@ -286,6 +293,7 @@ int main(int argc, const char* argv[]) {
     }
 
     if(admin >=0){
+        log(LOG_INFO,"Closing ADMIN socket");
         close(admin);
     }
 

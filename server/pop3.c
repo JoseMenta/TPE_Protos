@@ -331,6 +331,7 @@ void pop3_passive_accept(struct selector_key* key) {
         goto fail;
     }
     //Si tenemos metricas, cambiarlas aca
+    log(LOG_DEBUG,"Updating current and historic connections metrics");
     current_connections++;
     historic_connections++;
 
@@ -398,6 +399,7 @@ void pop3_destroy(pop3* state){
         free(state->path_to_user_maildir);
     }
     free(state);
+    log(LOG_DEBUG,"Reducing current connections metric");
     current_connections --; //se llama cuando se libera el estado de conexion (entonces termina la conexion)
 }
 /*
@@ -1076,7 +1078,7 @@ int dele_action(pop3* state){
     long index = strtol(state->arg, NULL,10);
     //REvisamos si se puede eliminar
     if( index <= state->emails_count &&  index>0 &&  !state->emails[index-1].deleted){
-        logf(LOG_INFO, "Marking to delete email with index %d", index);
+        logf(LOG_INFO, "Marking to delete email with index %ld", index);
         state->emails[index-1].deleted = true;
         msj_ret = OK_MESSSAGE;
     }

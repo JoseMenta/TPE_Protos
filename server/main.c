@@ -237,7 +237,7 @@ int main(int argc, const char* argv[]) {
         goto finally;
     }
 
-    log(LOG_INFO, "Setting ADMIN socket as passive");
+    log(LOG_INFO, "Setting ADMIN UDP socket");
     ss = selector_register(selector, admin, &admin_handler,
                            OP_READ, pop3_args);
     if(ss != SELECTOR_SUCCESS) {

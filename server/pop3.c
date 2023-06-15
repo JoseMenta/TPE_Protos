@@ -35,6 +35,7 @@
 #define ERROR_INDEX_MESSAGE "-ERR no such message\r\n"
 #define QUIT_MESSAGE "+OK Logging out\r\n"
 #define CAPA_MESSAGE "+OK Capability list follows\r\nUSER\r\nPIPELINING\r\n.\r\n"
+#define LIST_MESSAGE "+OK scan listing follows\r\n"
 #define NO_MAILDIR_MESSAGE "-ERR Could not open maildir\r\n"
 #define UNKNOWN_ERROR_MESSAGE "-ERR Closing connection\r\n"
 
@@ -801,13 +802,15 @@ int stat_action(pop3* state){
     char aux[max_len];
     //computamos el total de size
     long aux_len_emails = 0;
+    int deleted_count = 0;
     for(size_t i=0; i<state->emails_count ; i++){
         if(!state->emails[i].deleted){
             aux_len_emails += state->emails[i].size;
+        }else{
+            deleted_count++;
         }
     }
-    //TODO: no contar nos eliminados
-    snprintf(aux,max_len,"+OK %zu %ld\r\n",state->emails_count,aux_len_emails);
+    snprintf(aux,max_len,"+OK %zu %ld\r\n",state->emails_count - deleted_count,aux_len_emails);
     if(try_write(aux,&(state->info_write_buff)) == TRY_PENDING){
         return FINISHED;
     }
@@ -859,10 +862,10 @@ int list_action(pop3* state){
             return WRITING_RESPONSE;
         }else{
             //Tengo que escribir la primera linea de una respuesta multilinea
-            int message_len = 3 + 1 + 20 + 1+ 8 + 3;
-            char aux[message_len];
-            snprintf(aux,message_len,"+OK %zu messages\r\n", state->emails_count);
-            if (try_write(aux, &(state->info_write_buff)) == TRY_PENDING) {
+//            int message_len = 3 + 1 + 20 + 1+ 8 + 3;
+//            char aux[message_len];
+//            snprintf(aux,message_len,"+OK %zu messages\r\n", state->emails_count);
+            if (try_write(LIST_MESSAGE, &(state->info_write_buff)) == TRY_PENDING) {
                 return FINISHED;
             }
             state->state_data.transaction.multiline_state = MULTILINE_STATE_MULTILINE;

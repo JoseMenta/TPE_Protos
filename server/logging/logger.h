@@ -65,9 +65,9 @@ int logger_is_enabled_for(log_level_t level);
  Hace lugar en el buffer para por lo menos una linea mas de logging
  Ojo, tiene tamaño fijo
  */
-void logger_pre_print();
+void logger_pre_print(void);
 
-void logger_get_bufstart_and_maxlength(char** buf_start_var, size_t* max_len_var);
+void logger_get_bufstart_and_maxlength(char** write_startt, size_t* max_len);
 
 /*
  Escribe en el logStream

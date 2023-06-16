@@ -132,7 +132,7 @@ bool usersADT_update_pass(usersADT u, const char * user_name, const char * new_p
 }
 
 static int usersADT_find_user(usersADT u, const char * user_name) {
-    for(int i = 0; i < u->users_count; i++) {
+    for(unsigned int i = 0; i < u->users_count; i++) {
         if(strcmp(u->users_array[i].name, user_name) == 0) {
             return i;
         }

@@ -415,7 +415,7 @@ void pop3_read(struct selector_key* key){
     // Se obtiene la maquina de estados del cliente asociado al key
     struct state_machine* stm = &(GET_POP3(key)->stm);
     // Se ejecuta la función de lectura para el estado actual de la maquina de estados
-    const pop3_state st = stm_handler_read(stm,key);
+    stm_handler_read(stm,key);
 }
 /*
  * Funcion llamada por el selector cuando puede escribir en un fd
@@ -424,7 +424,7 @@ void pop3_write(struct selector_key* key){
     // Se obtiene la maquina de estados del cliente asociado al key
     struct state_machine* stm = &(GET_POP3(key)->stm);
     // Se ejecuta la función de lectura para el estado actual de la maquina de estados
-    const pop3_state st = stm_handler_write(stm,key);
+    stm_handler_write(stm,key);
 }
 /*
  * Funcion llamada por el selector cuando se llama a selector_unregister_fd (es decir, cuando se saca al fd del selector)
@@ -596,7 +596,6 @@ unsigned int write_response(struct selector_key* key){
 //                    return FINISHED;
 //                }
                 pop3_command command = get_command(state->cmd);
-                logf(LOG_DEBUG,"Writing request for cmd: '%s'", commands[command]);
                 state->command = command;
                 get_pop3_arg(state->pop3_parser,state->arg,MAX_ARG);
 //                state->arg = get_pop3_arg(parser_data);
@@ -671,7 +670,6 @@ bool check_command_for_protocol_state(protocol_state pop3_protocol_state, pop3_c
 }
 
 bool have_argument(const char* arg){
-    bool aux = strlen(arg)!=0;
     return strlen(arg)!=0;
 }
 
@@ -838,7 +836,7 @@ int list_action(pop3* state){
     if(state->state_data.transaction.multiline_state == MULTILINE_STATE_FIRST_LINE){
         //estamos escribiendo la primera linea, ya sea de error u OK
         if(state->state_data.transaction.has_arg){
-            if(state->state_data.transaction.arg > state->emails_count || state->state_data.transaction.arg <= 0){
+            if(state->state_data.transaction.arg > (long)state->emails_count || state->state_data.transaction.arg <= 0){
                 //Error de indice
                 if(try_write(ERROR_INDEX_MESSAGE,&(state->info_write_buff)) == TRY_PENDING){
                     return FINISHED;
@@ -874,7 +872,7 @@ int list_action(pop3* state){
     }
     if(state->state_data.transaction.multiline_state==MULTILINE_STATE_MULTILINE){
         //Tengo que imprimir todos los mails
-        for(; state->state_data.transaction.mail_index<state->emails_count; state->state_data.transaction.mail_index++){
+        for(; state->state_data.transaction.mail_index< (long)state->emails_count; state->state_data.transaction.mail_index++){
             if(state->emails[state->state_data.transaction.mail_index].deleted){
                 continue;
             }
@@ -925,7 +923,7 @@ int retr_action(pop3* state){
         state->state_data.transaction.has_arg = false;
     }
     size_t max = 0;
-    uint8_t * ptr = buffer_write_ptr(&(state->info_write_buff),&max);
+    buffer_write_ptr(&(state->info_write_buff),&max);
     if(state->state_data.transaction.multiline_state == MULTILINE_STATE_FIRST_LINE){
         if(!state->state_data.transaction.has_arg){
             if(try_write(ERROR_RETR_ARG_MESSEGE, &(state->info_write_buff)) == TRY_PENDING){
@@ -934,7 +932,7 @@ int retr_action(pop3* state){
             state->finished = true;
             reset_structures(state);
             return WRITING_RESPONSE;
-        }else if(state->state_data.transaction.arg > state->emails_count || state->state_data.transaction.arg <=0){
+        }else if(state->state_data.transaction.arg > (long)state->emails_count || state->state_data.transaction.arg <=0){
             if(try_write(ERROR_RETR_MESSAGE, &(state->info_write_buff)) == TRY_PENDING){
                 return FINISHED;
             }
@@ -1079,7 +1077,8 @@ int dele_action(pop3* state){
     //TODO: ver el caso donde no se puede convertir
     long index = strtol(state->arg, NULL,10);
     //REvisamos si se puede eliminar
-    if( index <= state->emails_count &&  index>0 &&  !state->emails[index-1].deleted){
+    //Casteo valido, ya que nuestro emails_count no puede superar
+    if( index <= (long)state->emails_count &&  index>0 &&  !state->emails[index-1].deleted){
         logf(LOG_INFO, "Marking to delete email with index %ld", index);
         state->emails[index-1].deleted = true;
         msj_ret = OK_MESSSAGE;
@@ -1095,8 +1094,8 @@ int dele_action(pop3* state){
 
 int rset_action(pop3* state){
     //computamos el total de size
-    for(int i=0; i<state->emails_count ; i++){
-        logf(LOG_INFO,"Unmarking to delete file %d",i+1);
+    for(size_t i=0; i<state->emails_count ; i++){
+        logf(LOG_INFO,"Unmarking to delete file %lu",i+1);
         state->emails[i].deleted = false;
     }
     if(try_write(OK_MESSSAGE, &(state->info_write_buff)) == TRY_PENDING){

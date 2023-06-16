@@ -198,7 +198,6 @@ admin_status parse_request(request* request, char* buff, size_t buff_len){
             return i+1>=HEADER_LINES?OK:FORMAT_ERROR;
         }
         *last = '\0';
-        int aux = strlen(buff);
         switch (i) {
             case 0:
                 strncpy(request->protocol,buff,PROTOCOL_SIZE);

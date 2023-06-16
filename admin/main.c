@@ -9,7 +9,7 @@
 
 #define PORT 1024
 
-char * commands_names_mio[STAT_BYTES_TRANSFERRED+1] = {"ADD_USER", "CHANGE_PASS", "REMOVE_USER", "GET_MAX_MAILS", "SET_MAX_MAILS", "GET_MAILDIR", "SET_MAILDIR","STAT_PREVIOUS_CONNECTIONS", "STAT_CURRENT_CONNECTIONS", "STAT_BYTES_TRANSFERRED"};
+char * commands_names_mio[STAT_BYTES_TRANSFERRED+1] = {"ADD_USER", "CHANGE_PASS", "REMOVE_USER", "GET_MAX_MAILS", "SET_MAX_MAILS", "GET_MAILDIR", "SET_MAILDIR","STAT_HISTORIC_CONNECTIONS", "STAT_CURRENT_CONNECTIONS", "STAT_BYTES_TRANSFERRED"};
 
 
 int main(int argc, const char* argv[]){
@@ -62,7 +62,6 @@ int main(int argc, const char* argv[]){
     char buff[DGRAM_SIZE];
     for(int i=0; i<client->count_commans ; i++){
         //Logica de recibir cosas
-        strcpy(buff, "timeout");
         recvfrom(server, (char *) buff, DGRAM_SIZE, 0, (struct sockaddr *) &fromAddr, &fromAddrLen);
         parse_resp(buff, client);
     }

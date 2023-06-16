@@ -900,17 +900,23 @@ int list_action(pop3* state){
     return WRITING_RESPONSE;
 }
 
-//TODO: pasar a un parser basico
-int get_flag(int curr_flag, char curr_char){
+typedef enum{
+    BYTE_STUFFING_CR,
+    BYTE_STUFFING_LF,
+    BYTE_STUFFING_DOT,
+    BYTE_STUFFING_NOTHING
+}byte_stuffing_state;
+
+byte_stuffing_state get_flag(byte_stuffing_state curr_flag, char curr_char){
     switch (curr_char) {
         case '\r':
-            return 1;
+            return BYTE_STUFFING_CR;
         case '\n':
-            return curr_flag==1?2:0;
+            return curr_flag==BYTE_STUFFING_CR?BYTE_STUFFING_LF:BYTE_STUFFING_NOTHING;
         case '.':
-            return curr_flag==2?3:0;
+            return curr_flag==BYTE_STUFFING_LF?BYTE_STUFFING_DOT:BYTE_STUFFING_NOTHING;
         default:
-            return 0;
+            return BYTE_STUFFING_NOTHING;
     }
 }
 
@@ -954,7 +960,7 @@ int retr_action(pop3* state){
                 return FINISHED;
             }
             state->state_data.transaction.multiline_state = MULTILINE_STATE_MULTILINE;
-            state->state_data.transaction.flag = 2;//TODO: cambiar a la maquina de estados y poner como inicial que vio \r\n
+            state->state_data.transaction.flag = BYTE_STUFFING_LF;//TODO: cambiar a la maquina de estados y poner como inicial que vio \r\n
         }
     }
     if(state->state_data.transaction.multiline_state == MULTILINE_STATE_MULTILINE){
@@ -972,11 +978,15 @@ int retr_action(pop3* state){
         //siempre me quedo con al menos 2 espacios en el de write por si tengo que hacer byte stuffing
         size_t write = 0, file = 0;
         for (; file < file_max && write < write_max - 1; write++, file++) {
-            if(PARSER_ACTION == parser_feed(state->byte_stuffing_parser, file_ptr[file])) {
+            state->state_data.transaction.flag = get_flag(state->state_data.transaction.flag,(char) file_ptr[file]);
+            if(state->state_data.transaction.flag == BYTE_STUFFING_DOT) { //para ver si mejora la velocidad
+//            if(PARSER_ACTION == parser_feed(state->byte_stuffing_parser, file_ptr[file])) {
                 //tengo que hacer byte stuffing
                 //vi un punto al inicio de una linea nueva
-                logf(LOG_DEBUG,"Doing byte stuffing in file %ld and position %ld ", state->state_data.transaction.arg, file);
+                logf(LOG_DEBUG, "Doing byte stuffing in file %ld and position %ld ", state->state_data.transaction.arg,
+                     file);
                 write_ptr[write++] = '.'; //agrego un punto al principio
+//            }
             }
             write_ptr[write] = file_ptr[file];
         }
@@ -990,10 +1000,15 @@ int retr_action(pop3* state){
         }
     }
     if(state->state_data.transaction.multiline_state == MULTILINE_STATE_END_LINE){
-        //podemos no llegar a poder escribir la ultima linea por lo de arriba, entonces probamos
-        //TODO: si lo ultimo que lei es un fin de linea -> no poner el primer \r\n
-        if(try_write("\r\n.\r\n", &(state->info_write_buff)) == TRY_PENDING){
-            return WRITING_RESPONSE;
+        if(state->state_data.transaction.flag == BYTE_STUFFING_LF){
+            //Termino con un \r\n, no tengo que agregar el primero
+            if(try_write(".\r\n", &(state->info_write_buff)) == TRY_PENDING){
+                return WRITING_RESPONSE;
+            }
+        }else{
+            if(try_write("\r\n.\r\n", &(state->info_write_buff)) == TRY_PENDING){
+                return WRITING_RESPONSE;
+            }
         }
         parser_reset(state->byte_stuffing_parser);
         reset_structures(state);

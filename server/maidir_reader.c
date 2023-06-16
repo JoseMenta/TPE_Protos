@@ -38,13 +38,13 @@ email* read_maildir(const char* maildir_path, size_t* size){
             if(S_ISREG(file_stat.st_mode)){
                 //Es un archivo regular, lo considero como un mail
                 if(ans == NULL || i>=ans_size){
-                    void* aux = ans;
-                    ans = realloc(ans,(ans_size+CHUNK_SIZE)*sizeof (email));
-                    if(ans==NULL || errno == ENOMEM){
+                    void* aux =  realloc(ans,(ans_size+CHUNK_SIZE)*sizeof (email));
+                    if(aux==NULL || errno == ENOMEM){
                         log(LOG_ERROR, "Error when using realloc for normal file");
                         ans = aux; //tengo que liberar la memoria original
                         goto fail;
                     }
+                    ans = aux;
                     ans_size+=CHUNK_SIZE;
                 }
                 ans[i].size = file_stat.st_size;

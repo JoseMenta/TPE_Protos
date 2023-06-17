@@ -123,7 +123,6 @@ bool usersADT_update_pass(usersADT u, const char * user_name, const char * new_p
             }
             strncpy(pass, new_pass, pass_length);
             u->users_array[i].pass = pass;
-            //OJO con esto, puede pasarse si la contraseña es mas larga
             return true;
         }
     }

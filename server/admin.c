@@ -30,7 +30,6 @@
 typedef enum{
     ADMIN_ADD_USER,
     ADMIN_CHANGE_PASS,
-    ADMIN_REMOVE_USER,
     ADMIN_GET_MAX_MAILS,
     ADMIN_SET_MAX_MAILS,
     ADMIN_GET_MAILDIR,
@@ -84,7 +83,6 @@ struct command{
 
 void add_user_action(int socket, request* req, struct pop3args* args, struct sockaddr_storage* client_addr, unsigned int client_len);
 void change_pass_action(int socket, request* req,struct pop3args* args, struct sockaddr_storage* client_addr, unsigned int client_len);
-//void remove_user_action(int socket, request* req,struct pop3args* args, struct sockaddr_storage* client_addr, unsigned int client_len);
 void get_max_mails_action(int socket, request* req, struct pop3args* args, struct sockaddr_storage* client_addr, unsigned int client_len);
 void set_max_mails_action(int socket, request* req,struct pop3args* args, struct sockaddr_storage* client_addr, unsigned int client_len);
 void get_maildir_action(int socket, request* req,struct pop3args* args, struct sockaddr_storage* client_addr, unsigned int client_len);
@@ -102,10 +100,6 @@ static command commands[] = {
         {
             .name = "CHANGE_PASS",
             .action = change_pass_action
-        },
-        {
-            .name = "REMOVE_USER",
-            .action = NULL //lo vamos a sacar
         },
         {
             .name = "GET_MAX_MAILS",

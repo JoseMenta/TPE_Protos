@@ -38,14 +38,20 @@
 #define LIST_MESSAGE "+OK scan listing follows\r\n"
 #define NO_MAILDIR_MESSAGE "-ERR Could not open maildir\r\n"
 #define UNKNOWN_ERROR_MESSAGE "-ERR Closing connection\r\n"
-
+#define MAX_LIST_FIRST_LINE (3 + 1 + 20 + 1 + 20 + 3) //+OK %ld %ld \r\n
+#define MAX_LIST_LINE (20+1+20+3) //%d %ld\r\n
+#define MAX_RETR_FIRST_LINE (3+1+20+1+6+3) //+OK %ld octets\r\n
+#define MAX_STAT_LINE (3+1+20+1+20+3) //+OK %zu %ld\r\n
+/*
+ * Estadísticas del servidor
+ */
 unsigned long historic_connections = 0;
 unsigned long current_connections = 0;
 unsigned long bytes_sent = 0;
 
-//Esto es lo que vamos a pasar en void* data del selector
-//Vamos a agregar lo que necesitemos, como un array con todos los mails que tiene el usuario
-
+/*
+ * Estructura para guardar un comando de POP3
+ */
 struct command{
     //chequear argumentos para el comando
     char* name;
@@ -55,6 +61,9 @@ struct command{
 
 typedef struct command command;
 
+/*
+ * Estructura para guardar datos asociados al estado de autorización de la conexion
+ */
 struct authorization{
     char * user;
     char * pass;
@@ -62,12 +71,16 @@ struct authorization{
     char * path_to_user_data;
 };
 
+
 typedef enum{
     MULTILINE_STATE_FIRST_LINE,
     MULTILINE_STATE_MULTILINE,
     MULTILINE_STATE_END_LINE,
 }multiline_state;
 
+/*
+ * Estructura para guardar datos asociados al estado de transaccion de la conexion
+ */
 struct transaction{
     int mail_index;
     bool has_arg;
@@ -78,10 +91,6 @@ struct transaction{
     bool file_ended;
     int file_fd;
     int flag;
-};
-
-struct update{
-    int i;
 };
 
 typedef enum{
@@ -95,7 +104,7 @@ typedef enum{
     RSET,
     QUIT,
     CAPA,
-    ERROR_COMMAND //para escribir el mensaje de error
+    ERROR_COMMAND //para escribir el mensaje de error y volver a recibir requests
 } pop3_command;
 
 typedef enum{
@@ -103,6 +112,9 @@ typedef enum{
     TRANSACTION,
 }protocol_state;
 
+/*
+ * Estructura para guardar toda la informacion asociada a una conexion al servidor
+ */
 struct pop3{
     int connection_fd;
     pop3_command command;
@@ -126,11 +138,9 @@ struct pop3{
     int references;
     struct pop3args* pop3_args;
     user_t * user_s;
-    char * user;
     union{
         struct authorization authorization;
         struct transaction transaction;
-        struct update update;
     }state_data;
 };
 
@@ -158,15 +168,14 @@ typedef enum{
     PROCESSING_RESPONSE,
     /*
     * FINISHED: estado de finalización de la interaccion
-    * Se presenta cuando termina la etapa de actualizacion
+    * Se utiliza para cerrar la conexion sin imprimir un mensaje de error
     */
     FINISHED,
     /*
     * ERROR: estado de error en la sesion
-    * Se presenta cuando hay un error en la conexion del usuario,
-    * por lo que se liberan todos los recursos asociados a esa conexion
-    * 
-    * DEJARLO AL FINAL, es considerado el max_state del stm
+    * Se utiliza para cerrar la conexion imprimiendo un mensaje de error
+    * previamente (por lo que debe suscribirse a escritura para que funcione)
+    * (Considerado como max_state de la stm)
     */
     ERROR
 } pop3_state;
@@ -191,7 +200,6 @@ bool not_argument(const char* arg);
 pop3_command get_command(const char* command);
 bool check_command_for_protocol_state(protocol_state pop3_protocol_state, pop3_command command);
 //acciones asociadas a un comando de pop3
-//TODO: que reciban a selector_key*
 int user_action(pop3* state);
 int pass_action(pop3* state);
 int stat_action(pop3* state);
@@ -203,6 +211,7 @@ int quit_action(pop3* state);
 int default_action(pop3* state);
 int rset_action(pop3* state);
 int capa_action(pop3* state);
+
 static struct command commands[]={
         {
             .name = "USER",
@@ -254,12 +263,15 @@ static struct command commands[]={
             .action = capa_action,
         },
         {
-            .name = NULL, //no deberia llegar aca
+            .name = "Error command", //no deberia llegar aca para buscar al comando
             .check = might_argument,
             .action = default_action
         }
 };
 
+/*
+ * Estados utilizados por la stm
+ */
 static const struct state_definition state_handlers[] ={
     {
         .state = HELLO,
@@ -289,28 +301,26 @@ static const struct state_definition state_handlers[] ={
 
 };
 
-//fd_handler que van a usar todas las conexiones al servidor (que usen el   socket pasivo de pop3)
+//fd_handler que van a usar todas las conexiones al servidor (que usen el socket pasivo de pop3)
 static const struct fd_handler handler = {
     .handle_read = pop3_read,
     .handle_write = pop3_write,
     .handle_block = NULL,
-    .handle_close = pop3_close //se llama incluso cuando cierra el servidor
+    .handle_close = pop3_close //se llama tambien cuando cierra el servidor
 };
 
 /*
  * Funcion utilizada en el socket pasivo para aceptar una nueva conexion y agregarla al selector
  */
 void pop3_passive_accept(struct selector_key* key) {
-    //Vamos a aceptar la conexion entrante
     pop3 *state = NULL;
-    // Se crea la estructura del socket
-    // activo para la conexion entrante
+    // Se crea la estructura del socket activo para la conexion entrante
     struct sockaddr_storage address;
     socklen_t address_len = sizeof(address);
     // Se acepta la conexion entrante, se cargan los datos en el socket activo y se devuelve el fd del socket activo
-    // Este fd será tanto para leer como para escribir en el socket activo
     const int client_fd = accept(key->fd, (struct sockaddr *) &address, &address_len);
-    //Si tuvimos un error al crear el socket activo o no lo pudimos hacer no bloqueante
+
+    //Si tuvimos un error al crear el socket activo o no lo pudimos hacer no bloqueante, no iniciamos la conexion
     if (client_fd == -1){
         log(LOG_ERROR, "Error creating active socket for user");
         goto fail;
@@ -331,7 +341,6 @@ void pop3_passive_accept(struct selector_key* key) {
         log(LOG_ERROR, "Failed to register socket")
         goto fail;
     }
-    //Si tenemos metricas, cambiarlas aca
     log(LOG_DEBUG,"Updating current and historic connections metrics");
     current_connections++;
     historic_connections++;
@@ -356,7 +365,7 @@ pop3* pop3_create(void * data){
     extern const parser_definition pop3_parser_definition;
     extern const parser_definition byte_stuffing_parser_definition;
     pop3* ans = calloc(1,sizeof(pop3));
-    if(ans == NULL || errno == ENOMEM){ //errno por optimismo Linux
+    if(ans == NULL || errno == ENOMEM){
         log(LOG_ERROR,"Error reserving memory for state");
         return NULL;
     }
@@ -375,6 +384,7 @@ pop3* pop3_create(void * data){
     buffer_init(&(ans->info_write_buff), BUFFER_SIZE ,ans->write_buff);
     buffer_init(&(ans->info_file_buff), BUFFER_SIZE, ans->file_buff);
     size_t max = 0;
+    //Agregamos el mensaje de bienvenida
     uint8_t * ptr = buffer_write_ptr(&(ans->info_write_buff),&max);
     strncpy((char*)ptr,WELCOME_MESSAGE,max);
     buffer_write_adv(&(ans->info_write_buff),strlen(WELCOME_MESSAGE));
@@ -387,12 +397,11 @@ pop3* pop3_create(void * data){
  * Funcion para liberar memoria asociada a la estructura pop3
  */
 void pop3_destroy(pop3* state){
-    log(LOG_DEBUG, "Destroying pop3");
+    log(LOG_DEBUG, "Destroying pop3 state");
     if(state == NULL){
         return;
     }
     logf(LOG_INFO, "Closing connection with fd %d", state->connection_fd);
-    //Si hay campos adentro que liberar, hacerlo aca
     parser_destroy(state->pop3_parser);
     parser_destroy(state->byte_stuffing_parser);
     free_emails(state->emails,state->emails_count);
@@ -427,7 +436,7 @@ void pop3_write(struct selector_key* key){
     stm_handler_write(stm,key);
 }
 /*
- * Funcion llamada por el selector cuando se llama a selector_unregister_fd (es decir, cuando se saca al fd del selector)
+ * Funcion llamada por el selector cuando se usa selector_unregister_fd (es decir, cuando se saca al fd del selector)
  */
 void pop3_close(struct selector_key* key){
     pop3 *data = GET_POP3(key);
@@ -454,14 +463,14 @@ unsigned hello_write(struct selector_key* key){
     size_t  max = 0;
     uint8_t* ptr = buffer_read_ptr(&(state->info_write_buff),&max);
     ssize_t sent_count = send(key->fd,ptr,max,MSG_NOSIGNAL);
-    bytes_sent += sent_count;
 
     if(sent_count == -1){
         log(LOG_ERROR,"Error writing at socket");
         return FINISHED;
     }
+    bytes_sent += sent_count;
     buffer_read_adv(&(state->info_write_buff),sent_count);
-    //si no pude mandar el mensaje de bienvenida completo
+    //si no pude mandar el mensaje de bienvenida completo, vuelve a intentar
     if(buffer_can_read(&(state->info_write_buff))){
         return HELLO;
     }
@@ -494,29 +503,10 @@ unsigned int read_request(struct selector_key* key){
             //avanzamos solo hasta el fin del comando
             buffer_read_adv(&(state->info_read_buff),i+1);
             get_pop3_cmd(state->pop3_parser,state->cmd,MAX_CMD);
-//            pop3_parser_data * parser_data = (pop3_parser_data *) parser_get_data(state->pop3_parser);
-//            if (parser_data == NULL) {
-//                printf("Error obteniendo los datos del parser\n");
-//                return FINISHED;
-//            }
-
-//            const char* parser_command = parser_data->cmd;
-//            TODO: chequear bien error
-//            if(parser_command == NULL){
-//                return FINISHED;
-//            }
             pop3_command command = get_command(state->cmd);
             logf(LOG_DEBUG,"Reading request for cmd: '%s'", command>=0 ? commands[command].name : "invalid command");
             state->command = command;
             get_pop3_arg(state->pop3_parser,state->arg,MAX_ARG);
-//            pop3_command command = get_command(parser_command);
-//            state->command = command;
-//            state->arg = get_pop3_arg(parser_data);
-//            if (state->arg == NULL) {
-//                printf("Error obteniendo el argumento del comando\n");
-//                return FINISHED;
-//            }
-//            free((void*)parser_data);
             if(parser == PARSER_ERROR || command == ERROR_COMMAND){
                 log(LOG_ERROR, "Unknown command");
                 state->command = ERROR_COMMAND;
@@ -532,21 +522,20 @@ unsigned int read_request(struct selector_key* key){
             parser_reset(state->pop3_parser);
             //Vamos a procesar la respuesta
             if(selector_set_interest(key->s,key->fd,OP_WRITE) != SELECTOR_SUCCESS){
-                log(LOG_ERROR, "Error setting interest");
+                log(LOG_ERROR, "Error setting interest to OP_WRITE after reading request");
                 return FINISHED;
             }
             return WRITING_RESPONSE; //vamos a escribir la respuesta
         }
     }
     //Avanzamos en el buffer, leimos lo que tenia
-    buffer_read_adv(&(state->info_read_buff),max);
+    buffer_read_adv(&(state->info_read_buff), (ssize_t) max);
     return READING_REQUEST; //vamos a seguir leyendo el request
 }
 unsigned int write_response(struct selector_key* key){
     pop3* state = GET_POP3(key);
     //ejecutamos la funcion para generar la respuesta, que va a setear a state->finished como corresponda
     command current_command = commands[state->command];
-    //TODO: hacer que devuelva a donde tenemos que ir para el caso de RETR
     if(!state->finished) {
         unsigned int ret_state = current_command.action(state); //ejecutamos la accion
         //Si tengo que irme de este estado (para leer del archivo) me voy
@@ -584,26 +573,10 @@ unsigned int write_response(struct selector_key* key){
             if(parser == PARSER_FINISHED || parser == PARSER_ERROR){
                 //avanzamos solo hasta el fin del comando
                 buffer_read_adv(&(state->info_read_buff),i+1);
-//                pop3_parser_data * parser_data = (pop3_parser_data *) parser_get_data(state->pop3_parser);
-//                if (parser_data == NULL) {
-//                    printf("Error obteniendo los datos del parser\n");
-//                    return FINISHED;
-//                }
                 get_pop3_cmd(state->pop3_parser,state->cmd,MAX_CMD);
-//                const char* parser_command = parser_data->cmd;
-//                TODO: chequear bien error
-//                if(parser_command == NULL){
-//                    return FINISHED;
-//                }
                 pop3_command command = get_command(state->cmd);
                 state->command = command;
                 get_pop3_arg(state->pop3_parser,state->arg,MAX_ARG);
-//                state->arg = get_pop3_arg(parser_data);
-//                if (state->arg == NULL) {
-//                    printf("Error obteniendo el argumento del comando\n");
-//                    return FINISHED;
-//                }
-//                free((void*)parser_data);
                 if(parser == PARSER_ERROR || command == ERROR_COMMAND || !commands[command].check(state->arg)){
                     state->command = ERROR_COMMAND;
                     log(LOG_ERROR, "Unknown command");
@@ -616,7 +589,7 @@ unsigned int write_response(struct selector_key* key){
                 return WRITING_RESPONSE; //vamos a escribir la respuesta
             }
         }
-        buffer_read_adv(&(state->info_read_buff),max);
+        buffer_read_adv(&(state->info_read_buff),(ssize_t ) max);
         //No hay un comando completo, volvemos a leer
         if(selector_set_interest(key->s,key->fd,OP_READ) != SELECTOR_SUCCESS){
             log(LOG_ERROR, "Error setting interest");
@@ -632,6 +605,7 @@ void finish_connection(const unsigned state, struct selector_key *key){
     pop3 * data = GET_POP3(key);
     if(data->pop3_protocol_state == TRANSACTION){
         logf(LOG_INFO, "Finishing connection of user '%s'", data->user_s->name);
+        //Liberamos la casilla del usuario
         data->user_s->logged=false;
     }
     if(data->pop3_protocol_state == TRANSACTION && data->state_data.transaction.file_opened){
@@ -641,12 +615,11 @@ void finish_connection(const unsigned state, struct selector_key *key){
             abort();
         }
     }
-
-    if (selector_unregister_fd(key->s, key->fd) != SELECTOR_SUCCESS) {
+    //TODO: revisar que antes era con key->fd, pero esto tambien se puede llamar desde el archivo
+    if (selector_unregister_fd(key->s, data->connection_fd) != SELECTOR_SUCCESS) {
         log(LOG_FATAL,"Error unregistering fd");
         abort();
     }
-    //con selector_unregister_fd, se va a llamar a la funcion pop3_close
 }
 /*
  * --------------------------------------------------------------------------------------
@@ -655,7 +628,6 @@ void finish_connection(const unsigned state, struct selector_key *key){
  */
 void reset_structures(pop3* state){
     memset(&(state->state_data),0,sizeof(state->state_data));
-    //Si hay que dejar alguna cosa distinta, hacerlo aca
 }
 
 bool check_command_for_protocol_state(protocol_state pop3_protocol_state, pop3_command command){
@@ -710,7 +682,8 @@ try_state try_write(const char* str, buffer* buff){
         return TRY_PENDING;
     }
     //Manda el mensaje parcialmente si no hay espacio
-    strncpy((char*)ptr, str, message_len);
+    memcpy(ptr, str, message_len); //eliminar warnings y es mas claro en lo que hacemos (no queremos el \0)
+//    strncpy((char*)ptr, str, message_len);
     buffer_write_adv(buff,(ssize_t)message_len);
     return TRY_DONE;
 }
@@ -777,8 +750,8 @@ int pass_action(pop3* state){
             state->path_to_user_maildir = usersADT_get_user_mail_path(state->pop3_args->users,state->pop3_args->maildir_path, state->state_data.authorization.user);
             size_t mails_max = state->pop3_args->max_mails;
             state->emails = read_maildir(state->path_to_user_maildir,&mails_max);
+            //TODO: ver el caso donde existe pero no hay mails
             if(state->emails == NULL){
-                //TODO: ver de imprimir un error y mantener la conexion
                 state->final_error_message = NO_MAILDIR_MESSAGE;
                 return ERROR;
             }
@@ -787,6 +760,7 @@ int pass_action(pop3* state){
         }
     }
     if(try_write(msj,&(state->info_write_buff)) == TRY_PENDING){
+        log(LOG_ERROR,"Writing to exit buffer was not possible when it should be empty")
         return FINISHED;
     }
     state->finished = true;
@@ -794,10 +768,7 @@ int pass_action(pop3* state){
 }
 
 int stat_action(pop3* state){
-    //TODO: reemplazar con constante
-    int max_len = 3+1+20+1+20+3;
-    //Puedo escribir la respuesta
-    char aux[max_len];
+    char aux[MAX_STAT_LINE];
     //computamos el total de size
     long aux_len_emails = 0;
     int deleted_count = 0;
@@ -808,21 +779,23 @@ int stat_action(pop3* state){
             deleted_count++;
         }
     }
-    snprintf(aux,max_len,"+OK %zu %ld\r\n",state->emails_count - deleted_count,aux_len_emails);
+    snprintf(aux,MAX_STAT_LINE,"+OK %zu %ld\r\n",state->emails_count - deleted_count,aux_len_emails);
     if(try_write(aux,&(state->info_write_buff)) == TRY_PENDING){
+        log(LOG_ERROR,"Writing to exit buffer was not possible when it should be empty")
         return FINISHED;
     }
     state->finished = true;
     return  WRITING_RESPONSE;
 }
+
 int default_action(pop3* state){
     if(try_write(ERROR_COMMAND_MESSAGE,&(state->info_write_buff)) == TRY_PENDING){
+        log(LOG_ERROR,"Writing to exit buffer was not possible when it should be empty")
         return FINISHED;
     }
     state->finished = true;
     return WRITING_RESPONSE;
 }
-
 
 int list_action(pop3* state){
     //procesamos el argumento recibido
@@ -847,19 +820,21 @@ int list_action(pop3* state){
             if(state->state_data.transaction.arg > (long)state->emails_count || state->state_data.transaction.arg <= 0){
                 //Error de indice
                 if(try_write(ERROR_INDEX_MESSAGE,&(state->info_write_buff)) == TRY_PENDING){
+                    log(LOG_ERROR,"Writing to exit buffer was not possible when it should be empty")
                     return FINISHED;
                 }
             }else if(state->emails[state->state_data.transaction.arg-1].deleted){
                 if(try_write(ERROR_DELETED_MESSAGE,&(state->info_write_buff)) == TRY_PENDING){
+                    log(LOG_ERROR,"Writing to exit buffer was not possible when it should be empty")
                     return FINISHED;
                 }
             }else {
                 //Tengo que mostrar solo la informacion de ese mail
-                int message_len = 3 + 20 + 1 + 20 + 3;
-                char aux[message_len];
+                char aux[MAX_LIST_FIRST_LINE] = {0};
                 email send_email = state->emails[state->state_data.transaction.arg - 1];
-                snprintf(aux, message_len, "+OK %ld %ld\r\n", state->state_data.transaction.arg, send_email.size);
+                snprintf(aux, MAX_LIST_FIRST_LINE, "+OK %ld %ld\r\n", state->state_data.transaction.arg, send_email.size);
                 if (try_write(aux, &(state->info_write_buff)) == TRY_PENDING) {
+                    log(LOG_ERROR,"Writing to exit buffer was not possible when it should be empty")
                     return FINISHED;
                 }
             }
@@ -869,6 +844,7 @@ int list_action(pop3* state){
         }else{
             //Tengo que escribir la primera linea de una respuesta multilinea
             if (try_write(LIST_MESSAGE, &(state->info_write_buff)) == TRY_PENDING) {
+                log(LOG_ERROR,"Writing to exit buffer was not possible when it should be empty")
                 return FINISHED;
             }
             state->state_data.transaction.multiline_state = MULTILINE_STATE_MULTILINE;
@@ -881,10 +857,9 @@ int list_action(pop3* state){
             if(state->emails[state->state_data.transaction.mail_index].deleted){
                 continue;
             }
-            int message_len = 20+1+20+3;
-            char aux[message_len];
+            char aux[MAX_LIST_LINE];
             email send_email = state->emails[state->state_data.transaction.mail_index];
-            snprintf(aux,message_len,"%d %ld\r\n",state->state_data.transaction.mail_index+1,send_email.size);
+            snprintf(aux,MAX_LIST_LINE,"%d %ld\r\n",state->state_data.transaction.mail_index+1,send_email.size);
             if (try_write(aux, &(state->info_write_buff)) == TRY_PENDING) {
                 //No entra la linea de este mail en el buffer
                 //sigo intentando despues
@@ -894,6 +869,7 @@ int list_action(pop3* state){
         state->state_data.transaction.multiline_state = MULTILINE_STATE_END_LINE;
     }
     if(state->state_data.transaction.multiline_state==MULTILINE_STATE_END_LINE){
+        //Solo agrega .\r\n porque antes la ultima linea termino el \r\n
         if (try_write(".\r\n", &(state->info_write_buff)) == TRY_PENDING) {
             //No entra la linea final en el buffer
             //sigo intentando despues
@@ -931,21 +907,22 @@ int retr_action(pop3* state){
         state->state_data.transaction.arg = strtol(state->arg, NULL,10);
         if(errno == EINVAL || errno == ERANGE){
             if(try_write(ERROR_RETR_ARG_MESSEGE, &(state->info_write_buff)) == TRY_PENDING){
+                log(LOG_ERROR,"Writing to exit buffer was not possible when it should be empty")
                 return FINISHED;
             }
             state->finished = true;
             reset_structures(state);
             return WRITING_RESPONSE;
         }
-        //TODO: manejar el caso donde no se puede convertir el argumento
     }else{
         state->state_data.transaction.has_arg = false;
     }
-    size_t max = 0;
-    buffer_write_ptr(&(state->info_write_buff),&max);
+//    size_t max = 0;
+//    buffer_write_ptr(&(state->info_write_buff),&max);
     if(state->state_data.transaction.multiline_state == MULTILINE_STATE_FIRST_LINE){
         if(!state->state_data.transaction.has_arg){
             if(try_write(ERROR_RETR_ARG_MESSEGE, &(state->info_write_buff)) == TRY_PENDING){
+                log(LOG_ERROR,"Writing to exit buffer was not possible when it should be empty")
                 return FINISHED;
             }
             state->finished = true;
@@ -953,6 +930,7 @@ int retr_action(pop3* state){
             return WRITING_RESPONSE;
         }else if(state->state_data.transaction.arg > (long)state->emails_count || state->state_data.transaction.arg <=0){
             if(try_write(ERROR_RETR_MESSAGE, &(state->info_write_buff)) == TRY_PENDING){
+                log(LOG_ERROR,"Writing to exit buffer was not possible when it should be empty")
                 return FINISHED;
             }
             state->finished = true;
@@ -960,20 +938,21 @@ int retr_action(pop3* state){
             return WRITING_RESPONSE;
         }else if(state->emails[state->state_data.transaction.arg-1].deleted){
             if(try_write(ERROR_DELETED_MESSAGE, &(state->info_write_buff)) == TRY_PENDING){
+                log(LOG_ERROR,"Writing to exit buffer was not possible when it should be empty")
                 return FINISHED;
             }
             state->finished = true;
             reset_structures(state);
             return  WRITING_RESPONSE;
         }else{
-            int message_size = 3+1+20+1+6+3;
-            char aux[message_size];
-            snprintf(aux,message_size,"+OK %ld octets\r\n",state->emails[state->state_data.transaction.arg-1].size);
+            char aux[MAX_RETR_FIRST_LINE] = {0};
+            snprintf(aux,MAX_RETR_FIRST_LINE,"+OK %ld octets\r\n",state->emails[state->state_data.transaction.arg-1].size);
             if(try_write(aux, &(state->info_write_buff)) == TRY_PENDING){
+                log(LOG_ERROR,"Writing to exit buffer was not possible when it should be empty")
                 return FINISHED;
             }
             state->state_data.transaction.multiline_state = MULTILINE_STATE_MULTILINE;
-            state->state_data.transaction.flag = BYTE_STUFFING_LF;//TODO: cambiar a la maquina de estados y poner como inicial que vio \r\n
+            state->state_data.transaction.flag = BYTE_STUFFING_LF;
         }
     }
     if(state->state_data.transaction.multiline_state == MULTILINE_STATE_MULTILINE){
@@ -991,45 +970,34 @@ int retr_action(pop3* state){
         //siempre me quedo con al menos 2 espacios en el de write por si tengo que hacer byte stuffing
         size_t write = 0, file = 0;
         for (; file < file_max && write < write_max - 1; write++, file++) {
-//            if(file_ptr[file] == '\n' && state->state_data.transaction.flag != BYTE_STUFFING_CR){
-//                state->state_data.transaction.flag = BYTE_STUFFING_CR;
-//                write_ptr[write++] = '\r';
-//            }
             state->state_data.transaction.flag = get_flag(state->state_data.transaction.flag,(char) file_ptr[file]);
-            //Esto no va a pasar nunca al mismo tiempo que el anterior
             if(state->state_data.transaction.flag == BYTE_STUFFING_DOT) { //para ver si mejora la velocidad
-//            if(PARSER_ACTION == parser_feed(state->byte_stuffing_parser, file_ptr[file])) {
-                //tengo que hacer byte stuffing
-                //vi un punto al inicio de una linea nueva
+                //tengo que hacer byte stuffing, vi un punto al inicio de una linea nueva
                 logf(LOG_DEBUG, "Doing byte stuffing in file %ld and position %ld ", state->state_data.transaction.arg,
                      file);
                 write_ptr[write++] = '.'; //agrego un punto al principio
-//            }
             }
             write_ptr[write] = file_ptr[file];
         }
         //No avanzar el maximo, por si se queda un caracter en el buffer del archivo que no se procesa por no tener 2 espacios en el de salida
         buffer_write_adv(&(state->info_write_buff), (ssize_t)write);
         buffer_read_adv(&(state->info_file_buff), (ssize_t)file);
-        //TODO: revisar, creo que esta es la condicion bajo la cual ya termino de procesar todo el archivo
-        //porque solo lee de file_buff si puede escribir lo que queda en write_buf
         if(!buffer_can_read(&(state->info_file_buff)) && state->state_data.transaction.file_ended){
             state->state_data.transaction.multiline_state = MULTILINE_STATE_END_LINE;
         }
     }
     if(state->state_data.transaction.multiline_state == MULTILINE_STATE_END_LINE){
-        if(state->state_data.transaction.flag == BYTE_STUFFING_LF){
-//            //Termino con un \r\n, no tengo que agregar el primero
-        //esto no agrega una linea de mas
-            if(try_write(".\r\n", &(state->info_write_buff)) == TRY_PENDING){
-                return WRITING_RESPONSE;
-            }
-        }else{
-            //Usar esto solo, lo asegura
+//        if(state->state_data.transaction.flag == BYTE_STUFFING_LF){
+//        //esto no agrega una linea de mas
+//            if(try_write(".\r\n", &(state->info_write_buff)) == TRY_PENDING){
+//                return WRITING_RESPONSE;
+//            }
+//        }else{
+//            //Usar esto solo, lo asegura
             if(try_write("\r\n.\r\n", &(state->info_write_buff)) == TRY_PENDING){
                 return WRITING_RESPONSE;
             }
-        }
+//        }
         parser_reset(state->byte_stuffing_parser);
         reset_structures(state);
         state->finished = true;
@@ -1040,7 +1008,6 @@ int retr_action(pop3* state){
 
 void process_open_file(const unsigned state, struct selector_key *key){
     //Aca abrimos el archivo y metemos el fd en el selector
-    //es de la maquina de estados esto
     pop3* data = GET_POP3(key);
     if(!data->state_data.transaction.file_opened){
         log(LOG_DEBUG,"Opening file");
@@ -1049,14 +1016,14 @@ void process_open_file(const unsigned state, struct selector_key *key){
         int dir_fd = open(path,O_DIRECTORY);//abrimos el directorio
         if(dir_fd==-1){
             //hubo un error abriendo el directorio
-            log(LOG_ERROR, "Error opening directory");
+            log(LOG_FATAL, "Error opening maildir directory");
             exit(1);
         }
         //Obtenemos el mail que se desea abrir
         email curr_email = data->emails[data->state_data.transaction.arg-1];
         int file_fd = openat(dir_fd,curr_email.name,O_RDONLY);
         if(file_fd==-1){
-            log(LOG_ERROR, "Error opening current email");
+            log(LOG_FATAL, "Error opening current email");
             exit(1);
         }
         close(dir_fd);//cerramos el directorio, ya no nos sirve
@@ -1069,6 +1036,7 @@ void process_open_file(const unsigned state, struct selector_key *key){
     //Nos suscribimos para leer del archivo
     selector_set_interest(key->s,data->state_data.transaction.file_fd,OP_READ);
 }
+
 unsigned int process_response(struct  selector_key* key){
     pop3* state = GET_POP3(key);
     if(!state->state_data.transaction.file_opened){
@@ -1122,8 +1090,6 @@ int dele_action(pop3* state){
     return  WRITING_RESPONSE;
 }
 
-
-
 int rset_action(pop3* state){
     //computamos el total de size
     for(size_t i=0; i<state->emails_count ; i++){
@@ -1136,6 +1102,7 @@ int rset_action(pop3* state){
     state->finished = true;
     return  WRITING_RESPONSE;
 }
+
 int noop_action(pop3* state){
     if(try_write(OK_MESSSAGE, &(state->info_write_buff)) == TRY_PENDING){
         return FINISHED;
@@ -1143,8 +1110,6 @@ int noop_action(pop3* state){
     state->finished = true;
     return WRITING_RESPONSE;
 }
-
-
 
 int quit_action(pop3* state){
     state->final_error_message = QUIT_MESSAGE;
@@ -1154,8 +1119,7 @@ int quit_action(pop3* state){
     }
     logf(LOG_INFO, "Finishing connection of user '%s'", state->user_s->name);
     state->user_s->logged=false;
-    //Estamos en transaction
-    //tengo que eliminar todos los archivos que marcaron para eliminar
+    //Estamos en transaction, tengo que eliminar todos los archivos que marcaron para eliminar
     int dir_fd = open(state->path_to_user_maildir,O_DIRECTORY);
     if(dir_fd == -1){
         log(LOG_ERROR,"Error opening mail directory to delete mails");
@@ -1171,11 +1135,11 @@ int quit_action(pop3* state){
     state->pop3_protocol_state = AUTHORIZATION;
     close(dir_fd);
     return ERROR;
-    //reinicio el estado
 }
 
 int capa_action(pop3* state){
     if(try_write(CAPA_MESSAGE, &(state->info_write_buff)) == TRY_PENDING){
+        log(LOG_ERROR,"Writing to exit buffer was not possible when it should be empty")
         return FINISHED;
     }
     state->finished = true;

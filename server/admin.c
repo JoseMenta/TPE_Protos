@@ -23,8 +23,6 @@
 #define ARG_COUNT 5
 #define ADMIN_PROTOCOL "PROTOS"
 #define HEADER_LINES 5
-//TODO: parametrizar
-#define ACCESS_TOKEN "1234"
 
 
 typedef enum{
@@ -91,7 +89,7 @@ void stat_historic_connections_action(int socket, request* req,struct pop3args* 
 void stat_current_connections_action(int socket, request* req,struct pop3args* args, struct sockaddr_storage* client_addr, unsigned int client_len);
 void stat_bytes_transferred_action(int socket, request* req, struct pop3args* args,struct sockaddr_storage* client_addr, unsigned int client_len);
 const char * get_status_message(admin_status status);
-
+admin_status parse_request(request* req, char * buff, size_t buff_len, struct pop3args* args);
 static command commands[] = {
         {
             .name = "ADD_USER",
@@ -132,7 +130,7 @@ static command commands[] = {
 };
 
 
-admin_status parse_request(request* req, char * buff, size_t buff_len);
+
 static void send_response(int socket, admin_status status, char* data, request * req,struct sockaddr_storage* client_addr, size_t addr_len){
     char ans[DGRAM_SIZE];
     int len = snprintf(ans,DGRAM_SIZE,"PROTOS\n%ld\n%zu\n%c\n%s\n",req->version,req->req_id,status==OK?'+':'-',data);
@@ -159,13 +157,14 @@ void admin_read(struct selector_key* key){
         return;
     }
 
-    admin_status status = parse_request(&req,buff,DGRAM_SIZE);
+    struct pop3args* args = (struct pop3args*) key->data;
+    admin_status status = parse_request(&req,buff,DGRAM_SIZE,args);
     if(status != OK){
         logf(LOG_WARNING, "[ADMIN] Invalid request from socket %d, got status '%s'", key->fd, get_status_message(status));
         send_response(key->fd,status,parser_messages[status],&req,&client_addr,len);
         return;
     }
-    struct pop3args* args = (struct pop3args*) key->data;
+
     commands[req.cmd].action(key->fd,&req,args,&client_addr,len);
 }
 
@@ -180,15 +179,19 @@ admin_command find_command(const char* cmd){
     return ADMIN_ERROR;
 }
 
-admin_status parse_request(request* request, char* buff, size_t buff_len){
+admin_status parse_request(request* request, char* buff, size_t buff_len, struct pop3args* args){
     //Vamos a ir buscando los \n para separar las cosas
     request->arg_c = 0;
     char * last;
     size_t len = strlen(buff);
     int i = 0;
+    admin_status ret = OK;
     while (i<MAX_LINES){
         last = strchr(buff,'\n');
         if(last == NULL){
+            if(ret!=OK){
+                return ret;
+            }
             return i+1>=HEADER_LINES?OK:FORMAT_ERROR;
         }
         *last = '\0';
@@ -196,31 +199,31 @@ admin_status parse_request(request* request, char* buff, size_t buff_len){
             case 0:
                 strncpy(request->protocol,buff,PROTOCOL_SIZE);
                 if(strcasecmp(ADMIN_PROTOCOL,request->protocol)!=0){
-                    return INVALID_PROTOCOL;
+                    ret = (ret == OK) ? INVALID_PROTOCOL:ret;
                 }
                 break;
             case 1:
                 request->version = strtol(buff,NULL,10);
                 if(errno == EINVAL || errno == ERANGE || request->version!=1){
-                    return INVALID_VERSION;
+                    ret = (ret == OK) ? INVALID_VERSION:ret;
                 }
                 break;
             case 2:
                 strncpy(request->token,buff,TOKEN_SIZE);
-                if(strncasecmp(request->token, ACCESS_TOKEN,TOKEN_SIZE) != 0){
-                    return INVALID_TOKEN;
+                if(strncasecmp(request->token, args->access_token,TOKEN_SIZE) != 0){
+                    ret = (ret == OK) ? INVALID_TOKEN:ret;
                 }
                 break;
             case 3:
                 request->req_id = strtol(buff,NULL,10);
                 if(errno == EINVAL || errno == ERANGE){
-                    return INVALID_ID;
+                    ret = (ret == OK) ? INVALID_ID:ret;
                 }
                 break;
             case 4:
                 strncpy(request->command,buff,COMMAND_SIZE);
                 if((request->cmd = find_command(request->command)) == ADMIN_ERROR){
-                    return INVALID_COMMAND;
+                    ret = (ret == OK) ? INVALID_COMMAND:ret;
                 }
                 break;
             default:
@@ -230,6 +233,9 @@ admin_status parse_request(request* request, char* buff, size_t buff_len){
         i++;
         len -= (last - buff); //TODO: revisar esto
         if(len == 0){
+            if(ret != OK){
+                return ret;
+            }
             return i+1>=HEADER_LINES?OK:FORMAT_ERROR;
         }
         buff = last + 1;
@@ -300,7 +306,7 @@ void set_max_mails_action(int socket, request* req,struct pop3args* args, struct
         return;
     }
     long max = strtol(req->args[0],NULL,10);
-    if((LONG_MIN == max || LONG_MAX == max) && ERANGE == errno){
+    if(((LONG_MIN == max || LONG_MAX == max) && ERANGE == errno ) || max<0){
         log(LOG_ERROR,"[ADMIN] Error: Invalid max argument");
         send_response(socket,GENERAL_ERROR,"Maximo invalido",req,client_addr,client_len);
         return;

@@ -5,15 +5,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define MAX_USERS 500
-
 static void help(const char *progname);
 
 static void showVersion(client_info client, const char * program);
 
-static void user(char *s, char ** user_name, char ** user_pass);
+static int user(char *s, char ** user_name, char ** user_pass);
 
-static unsigned short number(const char *s);
+static long number(const char *s);
 
 void parse_args(int argc, const char **argv, client_info client) {
     int c;
@@ -25,13 +23,8 @@ void parse_args(int argc, const char **argv, client_info client) {
     printf("\nIngrese token de verificación:");
     scanf( "%s", token);
 
-    //Otra manera pasarlo al final de la línea de comandos
-    //strcpy(token, argv[argc-1]);
-    //argc -= 1;
-
-
-    while (true) {
-        c = getopt(argc, (char *const *) argv, "hvA:C:R:mM:dD:pcb");
+    while (true && client->count_commans < MAX_COMMANDS) {
+        c = getopt(argc, (char *const *) argv, "hvA:mM:dD:pcb");
 
         if (c == -1) {
             break;
@@ -45,98 +38,57 @@ void parse_args(int argc, const char **argv, client_info client) {
                 showVersion(client, argv[0]);
                 break;
             case 'A':
-                if (nusers >= MAX_USERS) {
-                    fprintf(stderr, "maximun number of command line users reached: %d.\n", MAX_USERS);
+                if(user(optarg, &user_name, &user_pass)!=0){
+                    fprintf(stderr, "Invalid format for user informantion\n");
                     exit(1);
-                } else {
-                    user(optarg, &user_name, &user_pass);
-                    nusers++;
-                    snprintf(buff, DGRAM_SIZE, "%s\n%s\n%s\n%d\n%s\n%s\n%s\n\n",
-                                 client->name_protocol, client->version, token, client->count_commans, client->command_names[ADD_USER], user_name, user_pass);
-                    strcpy(client->list_command[client->count_commans].request, buff);
-                    client->list_command[client->count_commans].timeout=true;
-                    client->list_command[client->count_commans].name_command = ADD_USER;
-                    client->count_commans++;
                 }
-                break;
-            case 'C':
-                user(optarg, &user_name, &user_pass);
+                nusers++;
                 snprintf(buff, DGRAM_SIZE, "%s\n%s\n%s\n%d\n%s\n%s\n%s\n\n",
-                         client->name_protocol, client->version, token, client->count_commans, client->command_names[CHANGE_PASS], user_name, user_pass);
-                strcpy(client->list_command[client->count_commans].request, buff);
-                client->list_command[client->count_commans].timeout=true;
-                client->list_command[client->count_commans].name_command = CHANGE_PASS;
-                client->count_commans++;
-                break;
-            case 'R':
-                user(optarg, &user_name, &user_pass);
-                snprintf(buff, DGRAM_SIZE, "%s\n%s\n%s\n%d\n%s\n%s\n%s\n\n",
-                         client->name_protocol, client->version, token, client->count_commans, client->command_names[REMOVE_USER], user_name, user_pass);
-                strcpy(client->list_command[client->count_commans].request, buff);
-                client->list_command[client->count_commans].timeout=true;
-                client->list_command[client->count_commans].name_command = REMOVE_USER;
-                client->count_commans++;
+                             client->name_protocol, client->version, token, client->count_commans, client->command_names[ADD_USER], user_name, user_pass);
+                client->list_command[client->count_commans].name_command = ADD_USER;
                 break;
             case 'm':
                 snprintf(buff, DGRAM_SIZE, "%s\n%s\n%s\n%d\n%s\n\n",
                          client->name_protocol, client->version, token,client->count_commans, client->command_names[GET_MAX_MAILS]);
-                strcpy(client->list_command[client->count_commans].request, buff);
-                client->list_command[client->count_commans].timeout=true;
                 client->list_command[client->count_commans].name_command = GET_MAX_MAILS;
-                client->count_commans++;
                 break;
             case 'M':
-                snprintf(buff, DGRAM_SIZE, "%s\n%s\n%s\n%d\n%s\n%d\n\n",
+                snprintf(buff, DGRAM_SIZE, "%s\n%s\n%s\n%d\n%s\n%ld\n\n",
                          client->name_protocol, client->version, token, client->count_commans, client->command_names[SET_MAX_MAILS], number( optarg));
-                strcpy(client->list_command[client->count_commans].request, buff);
-                client->list_command[client->count_commans].timeout=true;
                 client->list_command[client->count_commans].name_command = SET_MAX_MAILS;
-                client->count_commans++;
                 break;
             case 'd':
                 snprintf(buff, DGRAM_SIZE, "%s\n%s\n%s\n%d\n%s\n\n",
                          client->name_protocol, client->version, token, client->count_commans, client->command_names[GET_MAILDIR]);
-                strcpy(client->list_command[client->count_commans].request, buff);
-                client->list_command[client->count_commans].timeout=true;
                 client->list_command[client->count_commans].name_command = GET_MAILDIR;
-                client->count_commans++;
                 break;
             case 'D':
                 snprintf(buff, DGRAM_SIZE, "%s\n%s\n%s\n%d\n%s\n%s\n\n",
                          client->name_protocol, client->version, token, client->count_commans, client->command_names[SET_MAILDIR], optarg);
-                strcpy(client->list_command[client->count_commans].request, buff);
-                client->list_command[client->count_commans].timeout=true;
                 client->list_command[client->count_commans].name_command = SET_MAILDIR;
-                client->count_commans++;
                 break;
             case 'p':
                 snprintf(buff, DGRAM_SIZE, "%s\n%s\n%s\n%d\n%s\n\n",
                          client->name_protocol, client->version, token, client->count_commans, client->command_names[STAT_PREVIOUS_CONNECTIONS]);
-                strcpy(client->list_command[client->count_commans].request, buff);
-                client->list_command[client->count_commans].timeout=true;
                 client->list_command[client->count_commans].name_command = STAT_PREVIOUS_CONNECTIONS;
-                client->count_commans++;
                 break;
             case 'c':
                 snprintf(buff, DGRAM_SIZE, "%s\n%s\n%s\n%d\n%s\n\n",
                          client->name_protocol, client->version, token, client->count_commans, client->command_names[STAT_CURRENT_CONNECTIONS]);
-                strcpy(client->list_command[client->count_commans].request, buff);
-                client->list_command[client->count_commans].timeout=true;
                 client->list_command[client->count_commans].name_command = STAT_CURRENT_CONNECTIONS;
-                client->count_commans++;
                 break;
             case 'b':
                 snprintf(buff, DGRAM_SIZE, "%s\n%s\n%s\n%d\n%s\n\n",
                          client->name_protocol, client->version, token, client->count_commans, client->command_names[STAT_BYTES_TRANSFERRED]);
-                strcpy(client->list_command[client->count_commans].request, buff);
-                client->list_command[client->count_commans].timeout=true;
                 client->list_command[client->count_commans].name_command = STAT_BYTES_TRANSFERRED;
-                client->count_commans++;
                 break;
             default:
                 printf("Invalid state\n");
-                break;
+                exit(1);
         }
+        strcpy(client->list_command[client->count_commans].request, buff);
+        client->list_command[client->count_commans].timeout=true;
+        client->count_commans++;
     }
     if (optind < argc) {
         fprintf(stderr, "argument not accepted: ");
@@ -148,30 +100,30 @@ void parse_args(int argc, const char **argv, client_info client) {
 }
 
 
-static unsigned short number(const char *s) {
+static long number(const char *s) {
     char *end     = 0;
     const long sl = strtol(s, &end, 10);
 
     if (end == s|| '\0' != *end
         || ((LONG_MIN == sl || LONG_MAX == sl) && ERANGE == errno)
-        || sl < 0 || sl > USHRT_MAX) {
+        || sl < 0) {
         fprintf(stderr, "number should in in the range of 1-65536: %s\n", s);
         exit(1);
     }
-    return (unsigned short)sl;
+    return sl;
 }
 
-static void user(char *s, char ** user_name, char ** user_pass) {
+static int user(char *s, char ** user_name, char ** user_pass) {
     char *p = strchr(s, ':');
     if(p == NULL) {
         fprintf(stderr, "password not found for '%s'\n", s);
-        return;
-    } else {
-        *p = 0;
-        p++;
-        *user_name = s;
-        *user_pass = p;
+        return 1;
     }
+    *p = 0;
+    p++;
+    *user_name = s;
+    *user_pass = p;
+    return 0;
 }
 
 static void showVersion(client_info client, const char * program){
@@ -185,8 +137,6 @@ static void help(const char *progname) {
             "   -h               Ayuda.\n"
             "   -v               Imprime información sobre la versión.\n"
             "   -A <name>:<pass> Agregar un usuario al servidor.\n"
-            "   -C <name>:<pass> Cambiar la contraseña del usuario.\n"
-            "   -R <name>:<pass> Remover un usuario del servidor.\n"
             "   -m               Recibir el numero de mails disponibles maximo.\n"
             "   -M <max>         Modificar el numero de mails disponibles maximo.\n"
             "   -d               Recibir el path al maildir.\n"
@@ -194,7 +144,6 @@ static void help(const char *progname) {
             "   -p               Recibir el número de conexiones previas.\n"
             "   -c               Recibir el número de conexiones actuales.\n"
             "   -b               Recibir el número de bytes transferidos.\n"
-            "   -t <token>       Token de verificacion.\n"
             "\n",
             progname);
 }

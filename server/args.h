@@ -19,6 +19,7 @@ struct pop3args {
     log_level_t     log_level;
     usersADT        users;
     unsigned long   max_mails;
+    char*           access_token;
 };
 
 /**

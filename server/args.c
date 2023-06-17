@@ -7,6 +7,8 @@
 #include <getopt.h>
 #include "args.h"
 
+#define DEFAULT_ACCESS_TOKEN "1234"
+
 static unsigned short port(const char *s);
 static char * path(const char * path);
 static void version(void);
@@ -113,6 +115,7 @@ usage(const char *progname) {
         "   -l <log level>   Nivel de log. Valores posibles: DEBUG, INFO, WARNING, ERROR, FATAL. Default: INFO.\n"
         "   -v               Imprime información sobre la versión.\n"
         "   -m <max>         La cantidad maxima de mails que lee el servidor de maildir para un usuario\n"
+        "   -t <token>       Token utilizado por el cliente para realizar cambios en el servidor\n"
         "\n",
         progname);
 }
@@ -130,12 +133,13 @@ parse_args(const int argc, const char **argv, struct pop3args *args) {
         exit(1);
     }
     args->log_level = LOG_INFO;
+    args->access_token = DEFAULT_ACCESS_TOKEN;
 
     int c;
     int nusers = 0;
 
     while (true) {
-        c = getopt(argc, (char *const *) argv, "hp:P:u:vd:m:l:");
+        c = getopt(argc, (char *const *) argv, "hp:P:u:vd:m:l:t:");
         if (c == -1) {
             break;
         }
@@ -172,6 +176,9 @@ parse_args(const int argc, const char **argv, struct pop3args *args) {
                 break;
             case 'l':
                 args->log_level = log_level(optarg);
+                break;
+            case 't':
+                args->access_token = optarg;
                 break;
             default:
                 fprintf(stderr, "Unknown argument: '%c'.\n", c);

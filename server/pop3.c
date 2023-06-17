@@ -967,7 +967,7 @@ int retr_action(pop3* state){
             return  WRITING_RESPONSE;
         }else{
             int message_size = 3+1+20+1+6+3;
-            char aux[3+20+6+3];
+            char aux[message_size];
             snprintf(aux,message_size,"+OK %ld octets\r\n",state->emails[state->state_data.transaction.arg-1].size);
             if(try_write(aux, &(state->info_write_buff)) == TRY_PENDING){
                 return FINISHED;

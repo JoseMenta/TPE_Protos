@@ -119,6 +119,7 @@ struct pop3{
     int connection_fd;
     pop3_command command;
     const char* final_error_message;
+    bool error_written;
     char  arg[MAX_ARG];
     char  cmd[MAX_CMD];
     struct state_machine stm;
@@ -694,9 +695,12 @@ unsigned finish_error(struct  selector_key* key){
     if(state->final_error_message == NULL){
         state->final_error_message = UNKNOWN_ERROR_MESSAGE;
     }
-    if(try_write(state->final_error_message,&(state->info_write_buff)) != TRY_DONE){
-        return ERROR; //espero a poder mandar el mensaje de error
+    if(!state->error_written){
+        if(try_write(state->final_error_message,&(state->info_write_buff)) == TRY_DONE){
+             state->error_written = true;
+        }
     }
+
 
     //Escribimos lo que tenemos en el buffer de salida al socket
     size_t  max = 0;

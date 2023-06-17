@@ -19,7 +19,7 @@
 #include "logging/logger.h"
 
 #define MAX_CMD 5
-#define MAX_ARG 41
+#define MAX_ARG 249
 #define WELCOME_MESSAGE "+OK POP3 server\r\n"
 #define USER_INVALID_MESSAGE "-ERR INVALID USER\r\n"
 #define USER_VALID_MESSAGE "+OK send PASS\r\n"
@@ -829,6 +829,14 @@ int list_action(pop3* state){
     if(!state->state_data.transaction.arg_processed && strlen(state->arg) != 0){
         state->state_data.transaction.has_arg = true;
         state->state_data.transaction.arg = strtol(state->arg, NULL,10);
+        if(errno == EINVAL || errno == ERANGE){
+            if(try_write(ERROR_INDEX_MESSAGE,&(state->info_write_buff)) == TRY_PENDING){
+                return FINISHED;
+            }
+            state->finished = true;
+            reset_structures(state);
+            return WRITING_RESPONSE;
+        }
     }else{
         state->state_data.transaction.has_arg = false;
     }
@@ -860,9 +868,6 @@ int list_action(pop3* state){
             return WRITING_RESPONSE;
         }else{
             //Tengo que escribir la primera linea de una respuesta multilinea
-//            int message_len = 3 + 1 + 20 + 1+ 8 + 3;
-//            char aux[message_len];
-//            snprintf(aux,message_len,"+OK %zu messages\r\n", state->emails_count);
             if (try_write(LIST_MESSAGE, &(state->info_write_buff)) == TRY_PENDING) {
                 return FINISHED;
             }
@@ -924,6 +929,14 @@ int retr_action(pop3* state){
     if(!state->state_data.transaction.arg_processed && strlen(state->arg) != 0){
         state->state_data.transaction.has_arg = true;
         state->state_data.transaction.arg = strtol(state->arg, NULL,10);
+        if(errno == EINVAL || errno == ERANGE){
+            if(try_write(ERROR_RETR_ARG_MESSEGE, &(state->info_write_buff)) == TRY_PENDING){
+                return FINISHED;
+            }
+            state->finished = true;
+            reset_structures(state);
+            return WRITING_RESPONSE;
+        }
         //TODO: manejar el caso donde no se puede convertir el argumento
     }else{
         state->state_data.transaction.has_arg = false;
@@ -978,7 +991,12 @@ int retr_action(pop3* state){
         //siempre me quedo con al menos 2 espacios en el de write por si tengo que hacer byte stuffing
         size_t write = 0, file = 0;
         for (; file < file_max && write < write_max - 1; write++, file++) {
+//            if(file_ptr[file] == '\n' && state->state_data.transaction.flag != BYTE_STUFFING_CR){
+//                state->state_data.transaction.flag = BYTE_STUFFING_CR;
+//                write_ptr[write++] = '\r';
+//            }
             state->state_data.transaction.flag = get_flag(state->state_data.transaction.flag,(char) file_ptr[file]);
+            //Esto no va a pasar nunca al mismo tiempo que el anterior
             if(state->state_data.transaction.flag == BYTE_STUFFING_DOT) { //para ver si mejora la velocidad
 //            if(PARSER_ACTION == parser_feed(state->byte_stuffing_parser, file_ptr[file])) {
                 //tengo que hacer byte stuffing
@@ -1001,11 +1019,13 @@ int retr_action(pop3* state){
     }
     if(state->state_data.transaction.multiline_state == MULTILINE_STATE_END_LINE){
         if(state->state_data.transaction.flag == BYTE_STUFFING_LF){
-            //Termino con un \r\n, no tengo que agregar el primero
+//            //Termino con un \r\n, no tengo que agregar el primero
+        //esto no agrega una linea de mas
             if(try_write(".\r\n", &(state->info_write_buff)) == TRY_PENDING){
                 return WRITING_RESPONSE;
             }
         }else{
+            //Usar esto solo, lo asegura
             if(try_write("\r\n.\r\n", &(state->info_write_buff)) == TRY_PENDING){
                 return WRITING_RESPONSE;
             }
@@ -1089,11 +1109,8 @@ unsigned int process_response(struct  selector_key* key){
 
 int dele_action(pop3* state){
     char * msj_ret = ERROR_MESSSAGE;
-    //TODO: ver el caso donde no se puede convertir
     long index = strtol(state->arg, NULL,10);
-    //REvisamos si se puede eliminar
-    //Casteo valido, ya que nuestro emails_count no puede superar
-    if( index <= (long)state->emails_count &&  index>0 &&  !state->emails[index-1].deleted){
+    if( errno!= EINVAL && errno != ERANGE && index <= (long)state->emails_count &&  index>0 &&  !state->emails[index-1].deleted){
         logf(LOG_INFO, "Marking to delete email with index %ld", index);
         state->emails[index-1].deleted = true;
         msj_ret = OK_MESSSAGE;
@@ -1155,12 +1172,6 @@ int quit_action(pop3* state){
     close(dir_fd);
     return ERROR;
     //reinicio el estado
-//    reset_structures(state);
-//    if(try_write(QUIT_MESSAGE, &(state->info_write_buff)) == TRY_PENDING){
-//        return FINISHED;
-//    }
-//    state->finished = true;
-//    return WRITING_RESPONSE;
 }
 
 int capa_action(pop3* state){

@@ -6,7 +6,7 @@
 #include "../parserADT.h"
 
 #define CMD_LENGTH                  4
-#define ARG_MAX_LENGTH              40
+#define ARG_MAX_LENGTH              248
 
 // Datos
 typedef struct pop3_parser_data {

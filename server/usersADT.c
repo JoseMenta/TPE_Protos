@@ -115,7 +115,6 @@ bool usersADT_update_pass(usersADT u, const char * user_name, const char * new_p
     for(unsigned int i = 0; i < u->users_count; i++){
         if(strcmp(u->users_array[i].name, user_name) == 0){
             logf(LOG_DEBUG, "Updating pass for user '%s'", user_name);
-            //TODO: esto es un error, al principio las copia pero ahora solo guarda el puntero
             free(u->users_array[i].pass);
             unsigned int pass_length = strlen(new_pass);
             char* pass = calloc(pass_length + 1, sizeof(char));

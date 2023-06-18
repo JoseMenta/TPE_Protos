@@ -13,9 +13,13 @@
 
 email* read_maildir(const char* maildir_path, size_t* size){
     size_t i = 0;
-    size_t ans_size = 0;
-    email* ans = NULL;
+    size_t ans_size = CHUNK_SIZE;
+    email* ans = malloc(CHUNK_SIZE * sizeof (email));
     DIR* mail_dir = NULL;
+    if(ans == NULL || errno == ENOMEM){
+        log(LOG_FATAL, "Error to allocate memory for emails");
+        goto fail;
+    }
     if(maildir_path == NULL){
         log(LOG_FATAL, "Maildir_path is null");
         goto fail;

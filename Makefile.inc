@@ -6,7 +6,7 @@
 COMPILER = ${CC}
 # Flags para hacer que el compilador sea mas estricto
 # Hay mas informacion sobre lo que hacen en https://gcc.gnu.org/onlinedocs/gcc/Warning-Options.html#index-Wformat_003d2
-CFLAGS = --std=c11 -Wall -pedantic -pedantic-errors -Wformat=2 -Wextra -Wno-unused-parameter -Wundef -Wuninitialized -Wno-implicit-fallthrough -D_POSIX_C_SOURCE=200809L -fsanitize=address -g
+CFLAGS = --std=c11 -Wall -pedantic -pedantic-errors -Wformat=2 -Wextra -Wno-unused-parameter -Wundef -Wuninitialized -Wno-implicit-fallthrough -D_POSIX_C_SOURCE=200809L -fsanitize=address -g -O3
 # 200112L antes
 # 200809L para usar fstatat
 # Los de la clase

@@ -21,7 +21,7 @@ void parse_args(int argc, const char **argv, client_info client) {
     char token[50];
 
     printf("\nIngrese token de verificación:");
-    scanf( "%s", token);
+    scanf( "%49s", token);
 
     while (true && client->count_commans < MAX_COMMANDS) {
         c = getopt(argc, (char *const *) argv, "hvA:mM:dD:pcb");

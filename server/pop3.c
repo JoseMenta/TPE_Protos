@@ -977,8 +977,7 @@ int retr_action(pop3* state){
             state->state_data.transaction.flag = get_flag(state->state_data.transaction.flag,(char) file_ptr[file]);
             if(state->state_data.transaction.flag == BYTE_STUFFING_DOT) { //para ver si mejora la velocidad
                 //tengo que hacer byte stuffing, vi un punto al inicio de una linea nueva
-                logf(LOG_DEBUG, "Doing byte stuffing in file %ld and position %ld ", state->state_data.transaction.arg,
-                     file);
+                logf(LOG_DEBUG, "Doing byte stuffing in file %ld and position %ld ", state->state_data.transaction.arg,file);
                 write_ptr[write++] = '.'; //agrego un punto al principio
             }
             write_ptr[write] = file_ptr[file];
@@ -1131,7 +1130,7 @@ int quit_action(pop3* state){
     }
     for(size_t i = 0; i<state->emails_count; i++){
         if(state->emails[i].deleted){
-            logf(LOG_INFO, "Deleting email %ld",i+1);
+            logf(LOG_INFO, "Deleting email %zu",i+1);
             //elimnamos el archivo (cuando ningun proceso lo tenga abierto, lo va a sacar)
             unlinkat(dir_fd,state->emails[i].name,0);
         }

@@ -44,6 +44,10 @@ max_mails(const char *s) {
 static char * path(const char * path){
     unsigned int path_len = strlen(path);
     char * ret_str = calloc(path_len+1,sizeof (char));
+    if(ret_str == NULL || errno == ENOMEM){
+        fprintf(stderr, "Error while getting memory for maildir path");
+        exit(1);
+    }
     strncpy(ret_str, path, path_len);
     return ret_str;
 }

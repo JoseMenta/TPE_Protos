@@ -91,7 +91,7 @@ int logger_post_print(int written, size_t max_len);
         int loginternal_written = snprintf(loginternal_bufstart, loginternal_maxlen, "[%04d-%02d-%02d %02d:%02d:%02d]%s\t" format "\n",    \
                                            loginternal_tm.tm_year + 1900, loginternal_tm.tm_mday, loginternal_tm.tm_mon + 1,               \
                                            loginternal_tm.tm_hour, loginternal_tm.tm_min, loginternal_tm.tm_sec,                           \
-                                           logger_get_level_string(level), ##__VA_ARGS__);                      \
+                                           logger_get_level_string(level), __VA_ARGS__);                      \
         logger_post_print(loginternal_written, loginternal_maxlen);                                                                          \
     }
 

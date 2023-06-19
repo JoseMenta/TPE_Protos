@@ -754,7 +754,6 @@ int pass_action(pop3* state){
             state->path_to_user_maildir = usersADT_get_user_mail_path(state->pop3_args->users,state->pop3_args->maildir_path, state->state_data.authorization.user);
             size_t mails_max = state->pop3_args->max_mails;
             state->emails = read_maildir(state->path_to_user_maildir,&mails_max);
-            //TODO: ver el caso donde existe pero no hay mails
             if(state->emails == NULL){
                 state->final_error_message = NO_MAILDIR_MESSAGE;
                 return ERROR;

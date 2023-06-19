@@ -12,7 +12,6 @@
 #include "usersADT.h"
 #include "logging/logger.h"
 
-//TODO: revisar
 #define MAX_LINES 10
 #define DGRAM_SIZE 1024 //10 lineas de las que soportamos
 #define DATA_SIZE 640
@@ -231,7 +230,7 @@ admin_status parse_request(request* request, char* buff, size_t buff_len, struct
                 (request->arg_c)++;
         }
         i++;
-        len -= (last - buff); //TODO: revisar esto
+        len -= (last - buff);
         if(len == 0){
             if(ret != OK){
                 return ret;
@@ -312,7 +311,6 @@ void set_max_mails_action(int socket, request* req,struct pop3args* args, struct
         return;
     }
     args->max_mails = max;
-    //TODO: traer datos
     if(snprintf(ans,DATA_SIZE,"Maximum value for mails set to %ld\n",max)<0){
         log(LOG_ERROR,"[ADMIN] Error generating set_max_mails response");
         send_response(socket,GENERAL_ERROR,"Error al generar la respuesta",req,client_addr,client_len);

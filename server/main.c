@@ -104,7 +104,7 @@ int main(int argc, const char* argv[]) {
     memset(&admin_addr,0,sizeof (admin_addr));
     admin_addr.sin_family = AF_INET;
     admin_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    admin_addr.sin_port = htons(1024); //TODO: hacer que se pueda cambiar
+    admin_addr.sin_port = htons(1024);
 
     log(LOG_DEBUG, "Opening POP3 IPv4 and IPv6 sockets");
     //AF_INET -> indica que usa IPV4
@@ -139,7 +139,6 @@ int main(int argc, const char* argv[]) {
     //con el 1, lo mandamos como "habilitado" (recibe un array de opciones)
     log(LOG_DEBUG, "Setting SO_REUSEADDR on IPv4 socket");
     setsockopt(server, SOL_SOCKET, SO_REUSEADDR, &(int){ 1 }, sizeof(int));
-    //TODO: revisar, deberia hacer que solo acepte IPV6 y con eso poder usar el mismo puerto
     log(LOG_DEBUG, "Setting IPV6_V6ONLY and SO_REUSEADDR on IPv6 socket");
     setsockopt(server_6, IPPROTO_IPV6, IPV6_V6ONLY, &(int){ 1 }, sizeof(int));
     setsockopt(server_6, SOL_SOCKET, SO_REUSEADDR, &(int){ 1 }, sizeof(int));
@@ -209,7 +208,6 @@ int main(int argc, const char* argv[]) {
     }
 
 
-    //TODO: cambiar para nuestros handlers
     const struct fd_handler pop3_handler = {
             .handle_read       = pop3_passive_accept,
             .handle_write      = NULL,

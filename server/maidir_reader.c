@@ -34,7 +34,6 @@ email* read_maildir(const char* maildir_path, size_t* size){
         if(strcmp(dirent->d_name,".")!=0 && strcmp(dirent->d_name,"..")!=0){
             //Tengo que considerar al directorio
             struct stat file_stat;
-            //TODO: probar esto, me ahorra hacer la concatenacion para tener todos los paths
             if(fstatat(dirfd(mail_dir),dirent->d_name,&file_stat,0)==-1){
                 log(LOG_ERROR, "An error occurred when using fstatat");
                 goto fail;

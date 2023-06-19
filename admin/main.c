@@ -41,8 +41,6 @@ int main(int argc, const char* argv[]){
 
     for(int i=0; i < client->count_commans; i++ ){
         //Logica de enviar las cosas
-        //printf("%s", client->list_commands[i]);
-        //TODO: REVISAR
         if (sendto(server, (const char*) client->list_command[i].request, DGRAM_SIZE, MSG_NOSIGNAL, (struct sockaddr*) &addr, addrlen) < 0){
             perror("Error sending request %d to server");
         }

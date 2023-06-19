@@ -146,4 +146,5 @@ static void help(const char *progname) {
             "   -b               Recibir el número de bytes transferidos.\n"
             "\n",
             progname);
+    exit(0);
 }

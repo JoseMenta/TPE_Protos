@@ -60,10 +60,14 @@ static FILE* log_stream = NULL;
 
 static void make_buffer_space(size_t len) {
     if (buffer_length + buffer_start + len > buffer_capacity) {
-        if (buffer_capacity <= len) {
+        if (len < buffer_capacity - buffer_length) {
+            //Tengo espacio suficiente si muevo memoria al principio
+            //el espacio antes de start (buffer_start) y despues de end (buffer_capacity - buffer_start - buffer_length) sumados
+            //es mayor al que necesito
             memmove(buffer, buffer + buffer_start, buffer_length);
             buffer_start = 0;
         } else if (buffer_capacity < LOG_MAX_BUFFER_SIZE) {
+            //Si puedo agrandarlo, lo hago
             size_t new_buffer_capacity = buffer_length + len;
             new_buffer_capacity = (new_buffer_capacity + LOG_BUFFER_SIZE_CHUNK - 1) / LOG_BUFFER_SIZE_CHUNK * LOG_BUFFER_SIZE_CHUNK;
             if (new_buffer_capacity > LOG_MAX_BUFFER_SIZE)
@@ -89,13 +93,14 @@ static void make_buffer_space(size_t len) {
  Si quedan bytes a escribir le avisamos al selector
  */
 static void try_flush_buffer_to_file() {
+    //escribimos asi porque lo marcamos como no bloqueante
     ssize_t written = write(log_file_fd, buffer + buffer_start, buffer_length);
     if (written > 0) {
         buffer_length -= written;
         buffer_start = (buffer_length == 0 ? 0 : (buffer_start + written));
     }
 
-    // Si quedan para escribir, me sigo interesando en escribir
+    // Si quedan para escribir, me quedo en el selector interesado para escribir
     selector_set_interest(selector, log_file_fd, buffer_length > 0 ? OP_WRITE : OP_NOOP);
 }
 
@@ -107,7 +112,7 @@ static void fd_close_handler(struct selector_key* key) {
     // Intento enviar lo que queda
 
     if (buffer_length != 0) {
-        // Lo hago bloqueante para que termine, TODO fijarse si esta bien
+        // Lo hago bloqueante para que termine, total ya el selector me saco porque llamaron a destroy
         int flags = fcntl(log_file_fd, F_GETFD, 0);
         fcntl(log_file_fd, F_SETFL, flags & (~O_NONBLOCK));
         ssize_t written = write(log_file_fd, buffer, buffer_length);
@@ -177,11 +182,11 @@ int logger_init(fd_selector selector_param, const char* log_file, FILE* log_stre
 
     // Chequeo que estoy loggeando por archivo o por Stream
     if (log_file_fd >= 0 || log_stream != NULL) {
-        buffer = malloc(LOG_MIN_BUFFER_SIZE);
+        buffer = malloc(LOG_MIN_BUFFER_SIZE); //empiezo con el tamaño minimo
         buffer_capacity = LOG_MIN_BUFFER_SIZE;
         buffer_length = 0;
         buffer_start = 0;
-        if (buffer == NULL) {
+        if (buffer == NULL || errno == ENOMEM) {
             close(log_file_fd);
             log_file_fd = -1;
             fprintf(stderr, "WARNING: Failed to malloc a buffer for logging\n");

@@ -61,7 +61,10 @@ int main(int argc, const char* argv[]) {
         return 1;
     }
 
-    logger_init(selector, "", NULL);
+    if(logger_init(selector, "", NULL)!=0){
+        fprintf(stderr,"Unable to initialize logger\n");
+        return 1;
+    }
 
     struct pop3args* pop3_args = malloc(sizeof(struct pop3args));
     if(pop3_args == NULL || errno == ENOMEM){

@@ -34,8 +34,8 @@ max_mails(const char *s) {
     const long sl = strtol(s, &end, 10);
 
     if (end == s|| '\0' != *end
-        || ((LONG_MIN == sl || LONG_MAX == sl) && ERANGE == errno)) {
-        fprintf(stderr, "port should in in the range of 1-65536: %s\n", s);
+        || ((LONG_MIN == sl || LONG_MAX == sl) && ERANGE == errno) || sl < 0) {
+        fprintf(stderr, "max should be greater than 0: %s\n", s);
         exit(1);
     }
     return sl;
@@ -113,7 +113,6 @@ usage(const char *progname) {
         "\n"
         "   -h               Ayuda.\n"
         "   -p <POP3 port>   Puerto entrante para conexiones POP3.\n"
-        "   -P <conf port>   Puerto entrante para conexiones de configuracion del servidor.\n"
         "   -d <path>        Path del directorio Maildir.\n"
         "   -u <name>:<pass> Usuario y contraseña de usuario POP3. Indicarlo para cada usuario que se desea agregar\n"
         "   -l <log level>   Nivel de log. Valores posibles: DEBUG, INFO, WARNING, ERROR, FATAL. Default: INFO.\n"
@@ -143,7 +142,7 @@ parse_args(const int argc, const char **argv, struct pop3args *args) {
     int nusers = 0;
 
     while (true) {
-        c = getopt(argc, (char *const *) argv, "hp:P:u:vd:m:l:t:");
+        c = getopt(argc, (char *const *) argv, "hp:u:vd:m:l:t:");
         if (c == -1) {
             break;
         }
@@ -154,9 +153,6 @@ parse_args(const int argc, const char **argv, struct pop3args *args) {
                 exit(0);
             case 'p':
                 args->pop3_port = port(optarg);
-                break;
-            case 'P':
-                args->pop3_config_port = port(optarg);
                 break;
             case 'u':
                 if(nusers >= MAX_USERS) {
@@ -198,7 +194,7 @@ parse_args(const int argc, const char **argv, struct pop3args *args) {
         exit(1);
     }
     if(args->maildir_path == NULL){
-        fprintf(stderr, "Maildir path missing. Please pass a maildir path with -d <path>");
+        fprintf(stderr, "Maildir path missing. Please pass a maildir path with -d <path>\n");
         exit(1);
     }
 

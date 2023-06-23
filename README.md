@@ -1,10 +1,5 @@
 # TPE Protocolos de comunicación
 
-### Grupo 06
-* Axel Facundo Preiti Tasat: https://github.com/AxelPreitiT
-* Gastón Ariel Francois: https://github.com/francoisgaston
-* José Rodolfo Mentasti: https://github.com/JoseMenta
-* Nicolás Suarez Durrels: https://github.com/nicosuarez272
 ## Instalación 
 Para compilar el proyecto, ubicarse en el directorio con los códigos fuentes y ejecutar
 ```
@@ -14,7 +9,7 @@ O se puede elegir tambien a  _clang_ como compilador
 ```
     make all CC=clang
 ```
-Luego, se habrán creado 2 ejecutables en la carpeta _bin_. Para correr el servidor, ejecutar
+Luego, se habrán creado 2 ejecutables en la carpeta _bin_, generada en el directorio del proyecto. Para correr el servidor, ejecutar
 ```
     ./bin/popserver -d <path_a_maildir>
 ```
@@ -30,3 +25,12 @@ hisóricas al servidor, ejecutar
 ```
 Allí se le pedira que ingrese el token por entrada estándar. Recuerde que el servidor debe estar ejecutándose
 previamente
+
+Los logs se almacenarán en la carpeta _log_, también generada en el directorio del proyecto. Cada archivo será identificado
+por el momento en el que empezó a correr el servidor
+
+### Grupo 06
+* Axel Facundo Preiti Tasat: https://github.com/AxelPreitiT
+* Gastón Ariel Francois: https://github.com/francoisgaston
+* José Rodolfo Mentasti: https://github.com/JoseMenta
+* Nicolás Suarez Durrels: https://github.com/nicosuarez272
